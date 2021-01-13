@@ -6,11 +6,18 @@ fn main() {
     let yaml = load_yaml!("cli.yaml");
     let matches = App::from(yaml).get_matches();
 
-    let mut rpfm_path = String::new();
+    let mut rpfm_path_string = String::new();
 
     if let Some(rpfm) = matches.value_of("rpfm-path") {
         println!("Value for rpfm-path: {}", rpfm);
-        rpfm_path = rpfm.to_owned();
+        rpfm_path_string = rpfm.to_owned();
+    }
+
+    let rpfm_path = Path::new(&rpfm_path_string);
+
+    if !rpfm_path.exists() {
+        println!("[ERROR] path to RPFM cli not found");
+        return;
     }
 
     if let Some(packfile) = matches.value_of("packfile") {
