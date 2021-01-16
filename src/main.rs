@@ -4,15 +4,30 @@ use crate::wh2_lua_error::Wh2LuaError;
 
 use clap::{load_yaml, App};
 use colored::Colorize;
+use lazy_static::lazy_static;
 use walkdir::WalkDir;
 
 use std::fs;
-use std::path::Path;
-use std::process::{Command, Stdio};
+use std::path::{Path, PathBuf};
+
+use rpfm_lib;
+use rpfm_lib::packedfile::table::db::DB;
+use rpfm_lib::packfile::{PackFile, PathType};
+use rpfm_lib::schema::Schema;
+use rpfm_lib::SUPPORTED_GAMES;
 
 mod config;
 mod log;
 mod wh2_lua_error;
+
+lazy_static! {
+    static ref SCHEMA: Schema = {
+        Log::debug("Loading schema...");
+        let config_path = rpfm_lib::config::get_config_path().expect("Config path is None");
+        Log::debug(&format!("RPFM Config path: {}", config_path.display()));
+        Schema::load(&SUPPORTED_GAMES["warhammer_2"].schema).unwrap()
+    };
+}
 
 fn main() {
     if let Err(error) = do_the_things() {
@@ -83,30 +98,21 @@ fn run_rpfm(config: &Config) -> Result<(), Wh2LuaError> {
 }
 
 fn rpfm_packfile(config: &Config) -> Result<(), Wh2LuaError> {
-    Command::new(&config.rpfm_path)
-        .args(&[
-            "-g",
-            "warhammer_2",
-            "-p",
-            &format!("{0}", &config.packfile.as_ref().unwrap().display()),
-            "packfile",
-            "-E",
-            &format!("{0}", &config.out_dir.display()),
-            "-",
-            "db",
-        ])
-        .status()
-        .map_err(|e| Wh2LuaError::IoError(e))
-        .and_then(|exit_status| {
-            if exit_status.success() {
-                Ok(())
-            } else {
-                Err(Wh2LuaError::UnexpectedExitStatus(exit_status))
-            }
-        })
+    let mut packfile = PackFile::open_packfiles(
+        &[config.packfile.as_ref().unwrap().clone()],
+        true,
+        false,
+        false,
+    )?;
+    let paths = vec![PathType::Folder(vec!["db".to_string()])];
+
+    packfile.extract_packed_files_by_type(&paths, &config.out_dir)?;
+
+    Ok(())
 }
 
 fn rpfm_to_tsv(config: &Config, db_file_path: &Path) -> Result<(), Wh2LuaError> {
+    // strip everything before "db/<table>/<db_file>"
     let prefix_path = db_file_path
         .parent()
         .and_then(Path::parent)
@@ -126,24 +132,13 @@ fn rpfm_to_tsv(config: &Config, db_file_path: &Path) -> Result<(), Wh2LuaError> 
     Log::info(&format!("Processing file: {}", relative_path.display()));
 
     let rpfm_resulting_tsv_file_name = db_file_path.with_extension("tsv");
-    Command::new(&config.rpfm_path)
-        .args(&[
-            "-g",
-            "warhammer_2",
-            "table",
-            "-e",
-            &format!("{}", db_file_path.display()),
-        ])
-        .stderr(Stdio::null())
-        .stdout(Stdio::null())
-        .status()
-        .map_err(|e| Wh2LuaError::IoError(e))
-        .and_then(|exit_status| {
-            if exit_status.success() {
-                std::fs::rename(rpfm_resulting_tsv_file_name, output_file_path)?;
-                Ok(())
-            } else {
-                Err(Wh2LuaError::UnexpectedExitStatus(exit_status))
-            }
+
+    Log::debug(&format!("Input file: {}", db_file_path.display()));
+    Log::debug(&format!("Output file: {}", output_file_path.display()));
+    DB::export_tsv_from_binary_file(&SCHEMA, &[PathBuf::from(&db_file_path)])
+        .map_err(|e| Wh2LuaError::RpfmError(e))
+        .and_then(|()| {
+            std::fs::rename(rpfm_resulting_tsv_file_name, output_file_path)?;
+            Ok(())
         })
 }

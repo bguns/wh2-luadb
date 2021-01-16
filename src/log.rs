@@ -8,6 +8,12 @@ impl Log {
         eprintln!("{} {}", "[INFO]".blue(), info_text);
     }
 
+    #[allow(unused_variables)]
+    pub fn debug(text: &str) {
+        #[cfg(debug_assertions)]
+        eprintln!("{} {}", "[DEBUG]".yellow(), text);
+    }
+
     pub fn rpfm(message: &str) {
         eprintln!("{} {}", "  [RPFM]".yellow(), message);
     }

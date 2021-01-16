@@ -5,7 +5,6 @@ use crate::log::Log;
 use crate::Wh2LuaError;
 
 pub struct Config {
-    pub rpfm_path: PathBuf,
     pub packfile: Option<PathBuf>,
     pub in_dir: Option<PathBuf>,
     pub out_dir: PathBuf,
@@ -13,18 +12,6 @@ pub struct Config {
 
 impl Config {
     pub fn from_matches(matches: &ArgMatches) -> Result<Config, Wh2LuaError> {
-        let rpfm_path: PathBuf = if let Some(rpfm) = matches.value_of("rpfm-path") {
-            PathBuf::from(rpfm)
-        } else {
-            return Err(Wh2LuaError::ConfigError(
-                "RPFM path not provided in config or command line arguments.".to_string(),
-            ));
-        };
-
-        if !rpfm_path.exists() {
-            return Err(Wh2LuaError::RpfmPathError(rpfm_path.clone()));
-        }
-
         let packfile_path = if let Some(packfile) = matches.value_of("packfile") {
             let packfile_path = PathBuf::from(packfile);
             if !packfile_path.exists() {
@@ -77,7 +64,6 @@ impl Config {
         };
 
         Ok(Config {
-            rpfm_path,
             packfile: packfile_path,
             in_dir: in_dir_path,
             out_dir: out_dir_path,
