@@ -1,87 +1,72 @@
-use clap::{load_yaml, App, ArgMatches};
-use std::path::PathBuf;
+use crate::config::Config;
+use crate::log::Log;
+use crate::wh2_lua_error::Wh2LuaError;
+
+use clap::{load_yaml, App};
+
+use std::fs;
 use std::process::Command;
 
-struct Config {
-    rpfm_path: PathBuf,
-    packfile: Option<PathBuf>,
-    _in_dir: Option<PathBuf>,
-    out_dir: PathBuf,
-}
+mod config;
+mod log;
+mod wh2_lua_error;
 
-impl Config {
-    fn from_matches(matches: &ArgMatches) -> Config {
-        let rpfm_path: PathBuf = if let Some(rpfm) = matches.value_of("rpfm-path") {
-            PathBuf::from(rpfm)
-        } else {
-            println!("[ERROR] Please provide a path to rpfm_cli.exe");
-            panic!();
-        };
-
-        if !rpfm_path.exists() {
-            println!("[ERROR] path to RPFM cli not found");
-            panic!();
-        }
-
-        let packfile_path = if let Some(packfile) = matches.value_of("packfile") {
-            Some(PathBuf::from(packfile))
-        } else {
-            None
-        };
-
-        let in_dir_path = if let Some(directory) = matches.value_of("directory") {
-            Some(PathBuf::from(directory))
-        } else {
-            None
-        };
-
-        let out_dir_path = if let Some(output_dir) = matches.value_of("output-dir") {
-            PathBuf::from(output_dir)
-        } else {
-            if let Some(ref packfile) = packfile_path {
-                let packfile_dir = packfile.parent().unwrap();
-                let packfile_name = packfile.file_stem().unwrap();
-                let mut dir = PathBuf::from(packfile_dir);
-                dir.push(&format!("{0}_lua_ext", packfile_name.to_str().unwrap()));
-                dir
-            } else {
-                PathBuf::new()
-            }
-        };
-
-        Config {
-            rpfm_path,
-            packfile: packfile_path,
-            _in_dir: in_dir_path,
-            out_dir: out_dir_path,
-        }
+fn main() {
+    if let Err(error) = do_the_things() {
+        Log::error(&error);
+    } else {
+        Log::info("all gucci!");
     }
 }
 
-fn main() {
+fn do_the_things() -> Result<(), Wh2LuaError> {
     let yaml = load_yaml!("cli.yaml");
     let matches = App::from(yaml).get_matches();
 
     let config = Config::from_matches(&matches);
 
-    println!("Running RPFM Command");
+    prepare_output_dir(&config)?;
 
-    if let Some(ref packfile) = config.packfile {
-        Command::new(&config.rpfm_path)
-            .args(&[
-                "-g",
-                "warhammer_2",
-                "-p",
-                &format!("{0}", &packfile.to_str().unwrap()),
-                "packfile",
-                "-E",
-                &format!("{0}", &config.out_dir.to_str().unwrap()),
-                "-",
-                "db",
-            ])
-            .spawn()
-            .expect("unable to run rpfm")
-            .wait()
-            .expect("error waiting for rpfm");
+    Log::info("Running RPFM Command");
+
+    if let Some(_) = config.packfile {
+        rpfm_packfile(&config)?;
+    } else {
+        unimplemented!("not yet implemented")
+    };
+
+    Ok(())
+}
+
+fn prepare_output_dir(config: &Config) -> Result<(), Wh2LuaError> {
+    fs::create_dir_all(&config.out_dir)?;
+    // Directory is empty if its iterator has no elements
+    if !&config.out_dir.read_dir()?.next().is_none() {
+        return Err(Wh2LuaError::OutDirNotEmpty(config.out_dir.clone()));
     }
+    Ok(())
+}
+
+fn rpfm_packfile(config: &Config) -> Result<(), Wh2LuaError> {
+    Command::new(&config.rpfm_path)
+        .args(&[
+            "-g",
+            "warhammer_2",
+            "-p",
+            &format!("{0}", &config.packfile.as_ref().unwrap().to_str().unwrap()),
+            "packfile",
+            "-E",
+            &format!("{0}", &config.out_dir.to_str().unwrap()),
+            "-",
+            "db",
+        ])
+        .status()
+        .map_err(|e| Wh2LuaError::IoError(e))
+        .and_then(|exit_status| {
+            if exit_status.success() {
+                Ok(())
+            } else {
+                Err(Wh2LuaError::UnexpectedExitStatus(exit_status))
+            }
+        })
 }
