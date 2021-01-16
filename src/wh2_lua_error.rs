@@ -6,6 +6,8 @@ use std::process::ExitStatus;
 
 #[derive(Debug)]
 pub enum Wh2LuaError {
+    ConfigError(String),
+    RpfmPathError(PathBuf),
     OutDirNotEmpty(PathBuf),
     IoError(std::io::Error),
     UnexpectedExitStatus(ExitStatus),
@@ -21,6 +23,16 @@ impl fmt::Display for Wh2LuaError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{} ", "[ERROR]".red())?;
         match &self {
+            &Wh2LuaError::ConfigError(message) => {
+                write!(f, "{}", message)
+            }
+            &Wh2LuaError::RpfmPathError(path) => {
+                write!(
+                    f,
+                    "rpfm_cli.exe not found at provided path: {}",
+                    path.to_str().unwrap()
+                )
+            }
             &Wh2LuaError::OutDirNotEmpty(path) => {
                 write!(f, "Output directory not empty: {}", path.to_str().unwrap())
             }
