@@ -26,13 +26,27 @@ impl Config {
         }
 
         let packfile_path = if let Some(packfile) = matches.value_of("packfile") {
-            Some(PathBuf::from(packfile))
+            let packfile_path = PathBuf::from(packfile);
+            if !packfile_path.exists() {
+                return Err(Wh2LuaError::ConfigError(format!(
+                    "Packfile with specified path not found: {}",
+                    packfile_path.display()
+                )));
+            }
+            Some(packfile_path)
         } else {
             None
         };
 
         let in_dir_path = if let Some(directory) = matches.value_of("directory") {
-            Some(PathBuf::from(directory))
+            let in_dir_path = PathBuf::from(directory);
+            if !in_dir_path.exists() {
+                return Err(Wh2LuaError::ConfigError(format!(
+                    "Input directory with specified path not found: {}",
+                    in_dir_path.display()
+                )));
+            }
+            Some(in_dir_path)
         } else {
             None
         };

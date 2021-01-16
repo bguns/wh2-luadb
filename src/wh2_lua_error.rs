@@ -30,11 +30,11 @@ impl fmt::Display for Wh2LuaError {
                 write!(
                     f,
                     "rpfm_cli.exe not found at provided path: {}",
-                    path.to_str().unwrap()
+                    path.display()
                 )
             }
             &Wh2LuaError::OutDirNotEmpty(path) => {
-                write!(f, "Output directory not empty: {}", path.to_str().unwrap())
+                write!(f, "Output directory not empty: {}", path.display())
             }
             &Wh2LuaError::IoError(io_error) => {
                 write!(f, "Unexpected IO error: {}", io_error)
