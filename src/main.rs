@@ -4,7 +4,6 @@ use crate::wh2_lua_error::Wh2LuaError;
 
 use clap::{load_yaml, App};
 use colored::Colorize;
-use lazy_static::lazy_static;
 use walkdir::WalkDir;
 
 use std::fs;
@@ -13,21 +12,10 @@ use std::path::{Path, PathBuf};
 use rpfm_lib;
 use rpfm_lib::packedfile::table::db::DB;
 use rpfm_lib::packfile::{PackFile, PathType};
-use rpfm_lib::schema::Schema;
-use rpfm_lib::SUPPORTED_GAMES;
 
 mod config;
 mod log;
 mod wh2_lua_error;
-
-lazy_static! {
-    static ref SCHEMA: Schema = {
-        Log::debug("Loading schema...");
-        let config_path = rpfm_lib::config::get_config_path().expect("Config path is None");
-        Log::debug(&format!("RPFM Config path: {}", config_path.display()));
-        Schema::load(&SUPPORTED_GAMES["warhammer_2"].schema).unwrap()
-    };
-}
 
 fn main() {
     if let Err(error) = do_the_things() {
@@ -87,12 +75,17 @@ fn run_rpfm(config: &Config) -> Result<(), Wh2LuaError> {
         }
     };
 
+    #[cfg(not(debug_assertions))]
+    Log::set_single_line_log(true);
+
     for entry in WalkDir::new(rpfm_in_dir.as_path()).min_depth(3) {
         let entry = entry.unwrap();
         if entry.path().extension().is_none() {
             rpfm_to_tsv(&config, &entry.path())?;
         }
     }
+
+    Log::set_single_line_log(false);
 
     Ok(())
 }
@@ -129,13 +122,13 @@ fn rpfm_to_tsv(config: &Config, db_file_path: &Path) -> Result<(), Wh2LuaError> 
     output_file_path = output_file_path.with_extension("tsv");
     fs::create_dir_all(&output_file_path.parent().unwrap())?;
 
-    Log::info(&format!("Processing file: {}", relative_path.display()));
+    Log::rpfm(&format!("Processing file: {}", relative_path.display()));
 
     let rpfm_resulting_tsv_file_name = db_file_path.with_extension("tsv");
 
     Log::debug(&format!("Input file: {}", db_file_path.display()));
     Log::debug(&format!("Output file: {}", output_file_path.display()));
-    DB::export_tsv_from_binary_file(&SCHEMA, &[PathBuf::from(&db_file_path)])
+    DB::export_tsv_from_binary_file(&config.schema, &[PathBuf::from(&db_file_path)])
         .map_err(|e| Wh2LuaError::RpfmError(e))
         .and_then(|()| {
             std::fs::rename(rpfm_resulting_tsv_file_name, output_file_path)?;
