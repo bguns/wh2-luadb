@@ -45,6 +45,7 @@ fn prepare_output_dir(config: &Config) -> Result<(), Wh2LuaError> {
 }
 
 fn run_rpfm(config: &Config) -> Result<(), Wh2LuaError> {
+    // If a packfile is specified, we extract the packfile. The input directory for futher steps is the same as the output directory
     let rpfm_in_dir = if let Some(ref packfile) = config.packfile {
         if !packfile.exists() {
             return Err(Wh2LuaError::ConfigError(format!(
@@ -56,9 +57,12 @@ fn run_rpfm(config: &Config) -> Result<(), Wh2LuaError> {
             "Extracting db folder from packfile: {}",
             packfile.to_str().unwrap()
         ));
+        // Run rpfm extract
         rpfm_packfile(&config)?;
         config.out_dir.clone()
-    } else {
+    }
+    // If an input directory is specified instead, we (obviously) use that for later steps
+    else {
         if let Some(ref in_dir) = config.in_dir {
             if !in_dir.exists() {
                 return Err(Wh2LuaError::ConfigError(format!(
