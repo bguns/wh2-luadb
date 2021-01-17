@@ -9,6 +9,7 @@ use rpfm_error;
 pub enum Wh2LuaError {
     ConfigError(String),
     RpfmError(rpfm_error::Error),
+    LuaError(String),
     OutDirNotEmpty(PathBuf),
     IoError(std::io::Error),
 }
@@ -40,6 +41,9 @@ impl fmt::Display for Wh2LuaError {
             }
             &Wh2LuaError::IoError(io_error) => {
                 write!(f, "Unexpected IO error: {}", io_error)
+            }
+            &Wh2LuaError::LuaError(message) => {
+                write!(f, "{}", message)
             }
         }
     }

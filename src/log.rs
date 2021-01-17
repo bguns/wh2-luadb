@@ -1,7 +1,12 @@
 use crate::Wh2LuaError;
 use colored::Colorize;
+use crossterm::cursor::MoveToColumn;
+use crossterm::execute;
+use crossterm::terminal::{Clear, ClearType, DisableLineWrap, EnableLineWrap};
 
-static mut NEWLINE: bool = true;
+use std::io::stderr;
+
+static mut SINGLE_LINE: bool = false;
 
 pub struct Log {}
 
@@ -34,20 +39,28 @@ impl Log {
 
     fn print_log(message: &str) {
         unsafe {
-            if NEWLINE {
-                eprintln!("{}", message);
+            if SINGLE_LINE {
+                let mut stderr = stderr();
+                execute!(stderr, MoveToColumn(1), Clear(ClearType::CurrentLine)).unwrap();
+                eprint!("{}", message);
             } else {
-                eprint!("\r{}\r{}", " ".repeat(70), message);
+                eprintln!("{}", message);
             }
         }
     }
 
     pub fn set_single_line_log(single_line: bool) {
         unsafe {
-            if !NEWLINE && !single_line {
+            let mut stderr = stderr();
+            if SINGLE_LINE && !single_line {
                 eprintln!();
             }
-            NEWLINE = !single_line
+            SINGLE_LINE = single_line;
+            if SINGLE_LINE {
+                execute!(stderr, DisableLineWrap).unwrap();
+            } else {
+                execute!(stderr, EnableLineWrap).unwrap();
+            }
         }
     }
 }

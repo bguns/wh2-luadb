@@ -6,12 +6,16 @@ use clap::{load_yaml, App};
 use colored::Colorize;
 use walkdir::WalkDir;
 
+use std::collections::BTreeMap;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::io::{BufReader, Read, Write};
+use std::path::Path;
 
 use rpfm_lib;
 use rpfm_lib::packedfile::table::db::DB;
+use rpfm_lib::packedfile::table::DecodedData;
 use rpfm_lib::packfile::{PackFile, PathType};
+use rpfm_lib::schema::Field;
 
 mod config;
 mod log;
@@ -81,7 +85,30 @@ fn run_rpfm(config: &Config) -> Result<(), Wh2LuaError> {
     for entry in WalkDir::new(rpfm_in_dir.as_path()).min_depth(3) {
         let entry = entry.unwrap();
         if entry.path().extension().is_none() {
-            rpfm_to_tsv(&config, &entry.path())?;
+            // strip everything before "db/<table>/<db_file>"
+            let prefix_path = entry
+                .path()
+                .parent()
+                .and_then(Path::parent)
+                .and_then(Path::parent);
+
+            let relative_path = if let Some(prefix) = prefix_path {
+                entry.path().strip_prefix(prefix).unwrap()
+            } else {
+                entry.path().clone()
+            };
+
+            let mut output_file_path = config.out_dir.clone();
+            output_file_path.push(relative_path);
+            output_file_path = output_file_path.with_extension("lua");
+            fs::create_dir_all(&output_file_path.parent().unwrap())?;
+
+            Log::rpfm(&format!("Processing file: {}", relative_path.display()));
+
+            Log::debug(&format!("Input file: {}", entry.path().display()));
+            Log::debug(&format!("Output file: {}", output_file_path.display()));
+
+            rpfm_db_to_lua(&config, &entry.path(), &output_file_path)?;
         }
     }
 
@@ -104,34 +131,111 @@ fn rpfm_packfile(config: &Config) -> Result<(), Wh2LuaError> {
     Ok(())
 }
 
-fn rpfm_to_tsv(config: &Config, db_file_path: &Path) -> Result<(), Wh2LuaError> {
-    // strip everything before "db/<table>/<db_file>"
-    let prefix_path = db_file_path
+fn rpfm_db_to_lua(
+    config: &Config,
+    db_file_path: &Path,
+    output_file_path: &Path,
+) -> Result<(), Wh2LuaError> {
+    let mut data = vec![];
+
+    {
+        let mut file = BufReader::new(fs::File::open(db_file_path)?);
+        file.read_to_end(&mut data)?;
+    }
+
+    let table_name = db_file_path
         .parent()
-        .and_then(Path::parent)
-        .and_then(Path::parent);
+        .and_then(Path::file_name)
+        .unwrap()
+        .to_str()
+        .unwrap();
 
-    let relative_path = if let Some(prefix) = prefix_path {
-        db_file_path.strip_prefix(prefix).unwrap()
+    let db = DB::read(&data, table_name, &config.schema, false)?;
+
+    let mut result = String::new();
+    result.push_str("local result = {\n");
+
+    let fields = db.get_ref_definition().get_fields_processed();
+    let is_single_key = fields.iter().filter(|field| field.get_is_key()).count() == 1;
+
+    if is_single_key {
+        result.push_str(&lua_key_value_table(&fields, db.get_ref_table_data())?);
     } else {
-        db_file_path.clone()
-    };
+        result.push_str(&lua_array_table(&fields, db.get_ref_table_data())?);
+    }
 
-    let mut output_file_path = config.out_dir.clone();
-    output_file_path.push(relative_path);
-    output_file_path = output_file_path.with_extension("tsv");
-    fs::create_dir_all(&output_file_path.parent().unwrap())?;
+    result.push_str("}\n\n");
+    result.push_str("return result");
 
-    Log::rpfm(&format!("Processing file: {}", relative_path.display()));
+    let mut out_file = fs::File::create(&output_file_path)?;
+    out_file.write_all(result.as_bytes())?;
 
-    let rpfm_resulting_tsv_file_name = db_file_path.with_extension("tsv");
+    Ok(())
+}
 
-    Log::debug(&format!("Input file: {}", db_file_path.display()));
-    Log::debug(&format!("Output file: {}", output_file_path.display()));
-    DB::export_tsv_from_binary_file(&config.schema, &[PathBuf::from(&db_file_path)])
-        .map_err(|e| Wh2LuaError::RpfmError(e))
-        .and_then(|()| {
-            std::fs::rename(rpfm_resulting_tsv_file_name, output_file_path)?;
-            Ok(())
-        })
+fn lua_key_value_table(fields: &[Field], data: &[Vec<DecodedData>]) -> Result<String, Wh2LuaError> {
+    let mut result = String::new();
+
+    let key_field_index = fields
+        .iter()
+        .position(|field| field.get_is_key())
+        .unwrap_or_else(|| 0);
+
+    let mut processed_data: BTreeMap<String, Vec<(String, DecodedData)>> = BTreeMap::new();
+
+    for row in data {
+        let key_string = row[key_field_index].data_to_string();
+        processed_data.insert(key_string.clone(), Vec::new());
+        for (f, d) in fields.iter().zip(row.iter()) {
+            processed_data
+                .get_mut(&key_string)
+                .unwrap()
+                .push((f.get_name().to_owned(), d.clone()));
+        }
+    }
+
+    for (key, value) in processed_data.iter() {
+        result.push_str(&format!("  [\"{}\"] = {{ ", key));
+        for (field_name, data) in value.iter() {
+            result.push_str(&decoded_data_to_lua_entry(&field_name, &data)?);
+        }
+        result.push_str("},\n");
+    }
+
+    Ok(result)
+}
+
+fn lua_array_table(fields: &[Field], data: &[Vec<DecodedData>]) -> Result<String, Wh2LuaError> {
+    let mut result = String::new();
+    for row in data {
+        result.push_str("  { ");
+        for (field, data) in fields.iter().zip(row.iter()) {
+            result.push_str(&decoded_data_to_lua_entry(field.get_name(), &data)?);
+        }
+        result.push_str("},\n");
+    }
+    Ok(result)
+}
+
+fn decoded_data_to_lua_entry(field_name: &str, data: &DecodedData) -> Result<String, Wh2LuaError> {
+    match data {
+        DecodedData::Boolean(value) => Ok(format!("[\"{}\"] = {}, ", field_name, value)),
+        DecodedData::F32(value) => Ok(format!("[\"{}\"] = {}, ", field_name, value)),
+        DecodedData::I16(value) => Ok(format!("[\"{}\"] = {}, ", field_name, value)),
+        DecodedData::I32(value) => Ok(format!("[\"{}\"] = {}, ", field_name, value)),
+        DecodedData::I64(value) => Ok(format!("[\"{}\"] = {}, ", field_name, value)),
+        DecodedData::StringU8(value) => Ok(format!("[\"{}\"] = \"{}\", ", field_name, value)),
+        DecodedData::StringU16(value) => Ok(format!("[\"{}\"] = \"{}\", ", field_name, value)),
+        DecodedData::OptionalStringU8(value) => {
+            Ok(format!("[\"{}\"] = \"{}\", ", field_name, value))
+        }
+        DecodedData::OptionalStringU16(value) => {
+            Ok(format!("[\"{}\"] = \"{}\", ", field_name, value))
+        }
+        DecodedData::SequenceU16(_) | DecodedData::SequenceU32(_) => {
+            return Err(Wh2LuaError::LuaError(
+                "Cannot convert recursive (sequence) fields to Lua".to_string(),
+            ))
+        }
+    }
 }

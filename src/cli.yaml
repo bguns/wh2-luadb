@@ -16,12 +16,6 @@ args:
         value_name: DIRECTORY
         about: Select a directory to (recursively) scan for extracted db files to convert to lua tables. If output directory is not specified, will output lua files to the same folder as the db files.
         takes_value: true
-    - rpfm-path:
-        short: r
-        long: rpfm
-        value_name: RPFM_CLI.EXE
-        about: The path to rpfm_cli.exe. You can omit this if rpfm_cli.exe is in your PATH environment variable. 
-        takes_value: true
     - output-dir:
         short: o
         long: outdir

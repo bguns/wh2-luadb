@@ -12,5 +12,6 @@ serde_json = "1.0"
 clap = { version = "3.0.0-beta.2", features = ["yaml"] }
 colored = "2"
 walkdir = "2"
+crossterm = "0.19.0"
 rpfm_lib = { path = "../rpfm-2.3.100/rpfm_lib" }
 rpfm_error = { path = "../rpfm-2.3.100/rpfm_error" }
