@@ -9,10 +9,10 @@ args:
         value_name: PACKFILE
         about: Select a packfile from which to extract db files as lua tables. If output directory is not specified, will output to a folder with the same name as the packfile.
         takes_value: true
-        conflicts_with: directory
-    - directory:
-        short: d
-        long: directory
+        conflicts_with: input-directory
+    - input-directory:
+        short: i
+        long: indir
         value_name: DIRECTORY
         about: Select a directory to (recursively) scan for extracted db files to convert to lua tables. If output directory is not specified, will output lua files to the same folder as the db files.
         takes_value: true
@@ -21,4 +21,10 @@ args:
         long: outdir
         value_name: DIRECTORY
         about: The directory to output the converted lua files to.
+        takes_value: true
+    - script-check: 
+        short: s
+        long: script-check
+        value_name: SCRIPT_NAME
+        about: The (relative) path to a script file on the VFS. If provided, the resulting lua scripts will only return data if the given script file exists. This can be used as a way to check if a certain mod is loaded.
         takes_value: true

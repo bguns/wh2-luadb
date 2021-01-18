@@ -153,15 +153,35 @@ fn rpfm_db_to_lua(
     let db = DB::read(&data, table_name, &config.schema, false)?;
 
     let mut result = String::new();
-    result.push_str("local result = {\n");
+    let mut indent: usize = 0;
+
+    if let Some(script_check) = &config.script_check {
+        result.push_str("local result = {}\n\n");
+        result.push_str(&format!("if vfs.exists(\"{}\") {{\n", script_check));
+        indent += 1;
+        result.push_str(&format!("{}result = {{\n", "  ".repeat(indent)));
+    } else {
+        result.push_str(&format!("{}local result = {{\n", "  ".repeat(indent)));
+    }
+
+    indent += 1;
 
     let fields = db.get_ref_definition().get_fields_processed();
     let is_single_key = fields.iter().filter(|field| field.get_is_key()).count() == 1;
 
     if is_single_key {
-        result.push_str(&lua_key_value_table(&fields, db.get_ref_table_data())?);
+        result.push_str(&lua_key_value_table(
+            &fields,
+            db.get_ref_table_data(),
+            indent,
+        )?);
     } else {
-        result.push_str(&lua_array_table(&fields, db.get_ref_table_data())?);
+        result.push_str(&lua_array_table(&fields, db.get_ref_table_data(), indent)?);
+    }
+
+    while indent > 1 {
+        indent -= 1;
+        result.push_str(&format!("{}}}\n", "  ".repeat(indent)));
     }
 
     result.push_str("}\n\n");
@@ -173,7 +193,11 @@ fn rpfm_db_to_lua(
     Ok(())
 }
 
-fn lua_key_value_table(fields: &[Field], data: &[Vec<DecodedData>]) -> Result<String, Wh2LuaError> {
+fn lua_key_value_table(
+    fields: &[Field],
+    data: &[Vec<DecodedData>],
+    indent: usize,
+) -> Result<String, Wh2LuaError> {
     let mut result = String::new();
 
     let key_field_index = fields
@@ -195,7 +219,7 @@ fn lua_key_value_table(fields: &[Field], data: &[Vec<DecodedData>]) -> Result<St
     }
 
     for (key, value) in processed_data.iter() {
-        result.push_str(&format!("  [\"{}\"] = {{ ", key));
+        result.push_str(&format!("{}[\"{}\"] = {{ ", "  ".repeat(indent), key));
         for (field_name, data) in value.iter() {
             result.push_str(&decoded_data_to_lua_entry(&field_name, &data)?);
         }
@@ -205,10 +229,14 @@ fn lua_key_value_table(fields: &[Field], data: &[Vec<DecodedData>]) -> Result<St
     Ok(result)
 }
 
-fn lua_array_table(fields: &[Field], data: &[Vec<DecodedData>]) -> Result<String, Wh2LuaError> {
+fn lua_array_table(
+    fields: &[Field],
+    data: &[Vec<DecodedData>],
+    indent: usize,
+) -> Result<String, Wh2LuaError> {
     let mut result = String::new();
     for row in data {
-        result.push_str("  { ");
+        result.push_str(&format!("{}{{ ", "  ".repeat(indent)));
         for (field, data) in fields.iter().zip(row.iter()) {
             result.push_str(&decoded_data_to_lua_entry(field.get_name(), &data)?);
         }

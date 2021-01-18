@@ -13,6 +13,7 @@ pub struct Config {
     pub packfile: Option<PathBuf>,
     pub in_dir: Option<PathBuf>,
     pub out_dir: PathBuf,
+    pub script_check: Option<String>,
 }
 
 impl Config {
@@ -68,6 +69,8 @@ impl Config {
             }
         };
 
+        let script_check = matches.value_of("script-check").map(str::to_string);
+
         Log::rpfm("Checking for schema update...");
         match Schema::check_update() {
             Ok(schema::APIResponseSchema::NoLocalFiles) => {
@@ -95,6 +98,7 @@ impl Config {
             packfile: packfile_path,
             in_dir: in_dir_path,
             out_dir: out_dir_path,
+            script_check,
         })
     }
 }
