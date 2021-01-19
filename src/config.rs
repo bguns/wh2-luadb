@@ -31,7 +31,7 @@ impl Config {
             None
         };
 
-        let in_dir_path = if let Some(directory) = matches.value_of("directory") {
+        let in_dir_path = if let Some(directory) = matches.value_of("input-directory") {
             let in_dir_path = PathBuf::from(directory);
             if !in_dir_path.exists() {
                 return Err(Wh2LuaError::ConfigError(format!(
@@ -44,7 +44,7 @@ impl Config {
             None
         };
 
-        let out_dir_path = if let Some(output_dir) = matches.value_of("output-dir") {
+        let out_dir_path = if let Some(output_dir) = matches.value_of("output-directory") {
             PathBuf::from(output_dir)
         } else {
             if let Some(ref packfile) = packfile_path {

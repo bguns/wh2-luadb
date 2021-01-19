@@ -9,7 +9,7 @@ use walkdir::WalkDir;
 use std::collections::BTreeMap;
 use std::fs;
 use std::io::{BufReader, Read, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use rpfm_lib;
 use rpfm_lib::packedfile::table::db::DB;
@@ -38,8 +38,19 @@ fn do_the_things() -> Result<(), Wh2LuaError> {
     prepare_output_dir(&config)?;
     Log::info(&format!("Config {}", "OK".green()));
 
-    Log::info("Processing files with RPFM...");
-    run_rpfm(&config)?;
+    Log::info("Loading files with RPFM...");
+    let preprocessed_tables = run_rpfm(&config)?;
+
+    Log::info("Writing data to Lua scripts...");
+
+    #[cfg(not(debug_assertions))]
+    Log::set_single_line_log(true);
+
+    for table in preprocessed_tables {
+        rpfm_db_to_lua(&config, &table)?;
+    }
+
+    Log::set_single_line_log(false);
 
     Ok(())
 }
@@ -53,7 +64,20 @@ fn prepare_output_dir(config: &Config) -> Result<(), Wh2LuaError> {
     Ok(())
 }
 
-fn run_rpfm(config: &Config) -> Result<(), Wh2LuaError> {
+// strip everything before "<db>/<table>/<db_file>"
+fn strip_db_prefix_from_path(path: &Path) -> PathBuf {
+    let prefix_path = path.parent().and_then(Path::parent).and_then(Path::parent);
+
+    let relative_path = if let Some(prefix) = prefix_path {
+        path.strip_prefix(prefix).unwrap()
+    } else {
+        path.clone()
+    };
+
+    PathBuf::from(relative_path)
+}
+
+fn run_rpfm(config: &Config) -> Result<Vec<TotalWarDbPreProcessed>, Wh2LuaError> {
     // If a packfile is specified, we extract the packfile. The input directory for futher steps is the same as the output directory
     let rpfm_in_dir = if let Some(ref packfile) = config.packfile {
         Log::rpfm(&format!(
@@ -79,42 +103,37 @@ fn run_rpfm(config: &Config) -> Result<(), Wh2LuaError> {
         }
     };
 
+    let mut result: Vec<TotalWarDbPreProcessed> = Vec::new();
+
     #[cfg(not(debug_assertions))]
     Log::set_single_line_log(true);
 
     for entry in WalkDir::new(rpfm_in_dir.as_path()).min_depth(3) {
         let entry = entry.unwrap();
         if entry.path().extension().is_none() {
-            // strip everything before "db/<table>/<db_file>"
-            let prefix_path = entry
-                .path()
-                .parent()
-                .and_then(Path::parent)
-                .and_then(Path::parent);
-
-            let relative_path = if let Some(prefix) = prefix_path {
-                entry.path().strip_prefix(prefix).unwrap()
-            } else {
-                entry.path().clone()
-            };
+            let relative_path = strip_db_prefix_from_path(&entry.path());
 
             let mut output_file_path = config.out_dir.clone();
-            output_file_path.push(relative_path);
+            output_file_path.push("lua_db");
+            output_file_path.push(relative_path.strip_prefix("db").unwrap());
             output_file_path = output_file_path.with_extension("lua");
             fs::create_dir_all(&output_file_path.parent().unwrap())?;
 
-            Log::rpfm(&format!("Processing file: {}", relative_path.display()));
+            Log::rpfm(&format!("Loading file: {}", relative_path.display()));
 
             Log::debug(&format!("Input file: {}", entry.path().display()));
-            Log::debug(&format!("Output file: {}", output_file_path.display()));
 
-            rpfm_db_to_lua(&config, &entry.path(), &output_file_path)?;
+            result.push(TotalWarDbPreProcessed::load_from_file(
+                &config,
+                &entry.path(),
+                &output_file_path,
+            )?);
         }
     }
 
     Log::set_single_line_log(false);
 
-    Ok(())
+    Ok(result)
 }
 
 fn rpfm_packfile(config: &Config) -> Result<(), Wh2LuaError> {
@@ -131,27 +150,94 @@ fn rpfm_packfile(config: &Config) -> Result<(), Wh2LuaError> {
     Ok(())
 }
 
-fn rpfm_db_to_lua(
-    config: &Config,
-    db_file_path: &Path,
-    output_file_path: &Path,
-) -> Result<(), Wh2LuaError> {
-    let mut data = vec![];
+enum TableData {
+    KeyValue(BTreeMap<String, Vec<(Field, DecodedData)>>),
+    FlatArray(Vec<Vec<(Field, DecodedData)>>),
+}
 
-    {
-        let mut file = BufReader::new(fs::File::open(db_file_path)?);
-        file.read_to_end(&mut data)?;
+struct TotalWarDbPreProcessed {
+    pub data: TableData,
+    pub output_file_path: PathBuf,
+}
+
+impl TotalWarDbPreProcessed {
+    pub fn load_from_file(
+        config: &Config,
+        rpfm_db_file: &Path,
+        output_file_path: &Path,
+    ) -> Result<Self, Wh2LuaError> {
+        let mut data = vec![];
+
+        {
+            let mut file = BufReader::new(fs::File::open(rpfm_db_file)?);
+            file.read_to_end(&mut data)?;
+        }
+
+        let table_name = rpfm_db_file
+            .parent()
+            .and_then(Path::file_name)
+            .unwrap()
+            .to_str()
+            .unwrap();
+
+        let db = DB::read(&data, table_name, &config.schema, false)?;
+
+        Ok(Self::from_rpfm_db(&config, &db, &output_file_path)?)
     }
 
-    let table_name = db_file_path
-        .parent()
-        .and_then(Path::file_name)
-        .unwrap()
-        .to_str()
-        .unwrap();
+    pub fn from_rpfm_db(
+        _config: &Config,
+        rpfm_db: &DB,
+        output_file_path: &Path,
+    ) -> Result<Self, Wh2LuaError> {
+        let rpfm_fields = rpfm_db.get_ref_definition().get_fields_processed();
+        let rpfm_data = rpfm_db.get_ref_table_data();
+        let is_single_key = rpfm_fields
+            .iter()
+            .filter(|field| field.get_is_key())
+            .count()
+            == 1;
 
-    let db = DB::read(&data, table_name, &config.schema, false)?;
+        let data = if is_single_key {
+            let key_field_index = rpfm_fields
+                .iter()
+                .position(|field| field.get_is_key())
+                .unwrap();
 
+            let mut processed_data: BTreeMap<String, Vec<(Field, DecodedData)>> = BTreeMap::new();
+
+            for row in rpfm_data {
+                let key_string = row[key_field_index].data_to_string();
+                processed_data.insert(key_string.clone(), Vec::new());
+                for (field, data) in rpfm_fields.iter().zip(row.iter()) {
+                    processed_data
+                        .get_mut(&key_string)
+                        .unwrap()
+                        .push((field.clone(), data.clone()));
+                }
+            }
+
+            TableData::KeyValue(processed_data)
+        } else {
+            let mut processed_data: Vec<Vec<(Field, DecodedData)>> = Vec::new();
+            for row in rpfm_data {
+                let mut processed_row: Vec<(Field, DecodedData)> = Vec::new();
+                for (field, data) in rpfm_fields.iter().zip(row.iter()) {
+                    processed_row.push((field.clone(), data.clone()));
+                }
+                processed_data.push(processed_row);
+            }
+            TableData::FlatArray(processed_data)
+        };
+
+        Ok(TotalWarDbPreProcessed {
+            data,
+            output_file_path: PathBuf::from(&output_file_path),
+        })
+    }
+}
+
+fn rpfm_db_to_lua(config: &Config, table_data: &TotalWarDbPreProcessed) -> Result<(), Wh2LuaError> {
     let mut result = String::new();
     let mut indent: usize = 0;
 
@@ -166,17 +252,18 @@ fn rpfm_db_to_lua(
 
     indent += 1;
 
-    let fields = db.get_ref_definition().get_fields_processed();
-    let is_single_key = fields.iter().filter(|field| field.get_is_key()).count() == 1;
+    Log::info(&format!(
+        "Creating script: {}",
+        &strip_db_prefix_from_path(&table_data.output_file_path).display()
+    ));
 
-    if is_single_key {
-        result.push_str(&lua_key_value_table(
-            &fields,
-            db.get_ref_table_data(),
-            indent,
-        )?);
-    } else {
-        result.push_str(&lua_array_table(&fields, db.get_ref_table_data(), indent)?);
+    match &table_data.data {
+        TableData::KeyValue(kv_table_data) => {
+            result.push_str(&lua_key_value_table(&kv_table_data, indent)?);
+        }
+        TableData::FlatArray(arr_table_data) => {
+            result.push_str(&lua_array_table(&arr_table_data, indent)?);
+        }
     }
 
     while indent > 1 {
@@ -187,41 +274,22 @@ fn rpfm_db_to_lua(
     result.push_str("}\n\n");
     result.push_str("return result");
 
-    let mut out_file = fs::File::create(&output_file_path)?;
+    let mut out_file = fs::File::create(&table_data.output_file_path)?;
     out_file.write_all(result.as_bytes())?;
 
     Ok(())
 }
 
 fn lua_key_value_table(
-    fields: &[Field],
-    data: &[Vec<DecodedData>],
+    kv_table_data: &BTreeMap<String, Vec<(Field, DecodedData)>>,
     indent: usize,
 ) -> Result<String, Wh2LuaError> {
     let mut result = String::new();
 
-    let key_field_index = fields
-        .iter()
-        .position(|field| field.get_is_key())
-        .unwrap_or_else(|| 0);
-
-    let mut processed_data: BTreeMap<String, Vec<(String, DecodedData)>> = BTreeMap::new();
-
-    for row in data {
-        let key_string = row[key_field_index].data_to_string();
-        processed_data.insert(key_string.clone(), Vec::new());
-        for (f, d) in fields.iter().zip(row.iter()) {
-            processed_data
-                .get_mut(&key_string)
-                .unwrap()
-                .push((f.get_name().to_owned(), d.clone()));
-        }
-    }
-
-    for (key, value) in processed_data.iter() {
+    for (key, value) in kv_table_data.iter() {
         result.push_str(&format!("{}[\"{}\"] = {{ ", "  ".repeat(indent), key));
-        for (field_name, data) in value.iter() {
-            result.push_str(&decoded_data_to_lua_entry(&field_name, &data)?);
+        for (field, data) in value.iter() {
+            result.push_str(&decoded_data_to_lua_entry(&field.get_name(), &data)?);
         }
         result.push_str("},\n");
     }
@@ -230,14 +298,13 @@ fn lua_key_value_table(
 }
 
 fn lua_array_table(
-    fields: &[Field],
-    data: &[Vec<DecodedData>],
+    arr_table_data: &[Vec<(Field, DecodedData)>],
     indent: usize,
 ) -> Result<String, Wh2LuaError> {
     let mut result = String::new();
-    for row in data {
+    for row in arr_table_data {
         result.push_str(&format!("{}{{ ", "  ".repeat(indent)));
-        for (field, data) in fields.iter().zip(row.iter()) {
+        for (field, data) in row {
             result.push_str(&decoded_data_to_lua_entry(field.get_name(), &data)?);
         }
         result.push_str("},\n");

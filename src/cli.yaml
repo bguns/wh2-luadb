@@ -16,7 +16,7 @@ args:
         value_name: DIRECTORY
         about: Select a directory to (recursively) scan for extracted db files to convert to lua tables. If output directory is not specified, will output lua files to the same folder as the db files.
         takes_value: true
-    - output-dir:
+    - output-directory:
         short: o
         long: outdir
         value_name: DIRECTORY
