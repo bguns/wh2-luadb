@@ -2,10 +2,9 @@ use clap::ArgMatches;
 use std::path::PathBuf;
 
 use crate::log::Log;
+use crate::rpfm::Rpfm;
 use crate::Wh2LuaError;
 
-use rpfm_lib;
-use rpfm_lib::schema;
 use rpfm_lib::schema::Schema;
 
 pub struct Config {
@@ -71,27 +70,7 @@ impl Config {
 
         let script_check = matches.value_of("script-check").map(str::to_string);
 
-        Log::rpfm("Checking for schema update...");
-        match Schema::check_update() {
-            Ok(schema::APIResponseSchema::NoLocalFiles) => {
-                Log::rpfm("No schema files found locally. Downloading...");
-                Schema::update_schema_repo()?;
-                Log::rpfm("Schema downloaded!")
-            }
-            Ok(schema::APIResponseSchema::NewUpdate) => {
-                Log::rpfm("Updated schema found. Downloading update...");
-                Schema::update_schema_repo()?;
-                Log::rpfm("Schema updated!");
-            }
-            Ok(schema::APIResponseSchema::NoUpdate) => {
-                Log::rpfm("Schema up to date");
-            }
-            Err(e) => {
-                return Err(Wh2LuaError::RpfmError(e));
-            }
-        }
-
-        let schema = Schema::load(&rpfm_lib::SUPPORTED_GAMES["warhammer_2"].schema)?;
+        let schema = Rpfm::load_schema()?;
 
         Ok(Config {
             schema,
