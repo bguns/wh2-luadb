@@ -1,13 +1,16 @@
 use std::collections::BTreeMap;
 
-use rpfm_lib::packedfile::table::DecodedData;
-use rpfm_lib::schema::Field;
-
 use std::path::{Path, PathBuf};
 
+pub enum LuaValue {
+    Number(String),
+    Text(String),
+    Boolean(bool),
+}
+
 pub enum TableData {
-    KeyValue(BTreeMap<String, Vec<(Field, DecodedData)>>),
-    FlatArray(Vec<Vec<(Field, DecodedData)>>),
+    KeyValue(BTreeMap<String, Vec<(String, LuaValue)>>),
+    FlatArray(Vec<Vec<(String, LuaValue)>>),
 }
 
 pub struct TotalWarDbPreProcessed {

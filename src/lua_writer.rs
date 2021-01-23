@@ -1,15 +1,12 @@
 use crate::config::Config;
 use crate::log::Log;
-use crate::tw_db_pp::{TableData, TotalWarDbPreProcessed};
+use crate::tw_db_pp::{LuaValue, TableData, TotalWarDbPreProcessed};
 use crate::util;
 use crate::wh2_lua_error::Wh2LuaError;
 
 use std::collections::BTreeMap;
 use std::fs;
 use std::io::Write;
-
-use rpfm_lib::packedfile::table::DecodedData;
-use rpfm_lib::schema::Field;
 
 pub struct LuaWriter {}
 
@@ -61,15 +58,15 @@ impl LuaWriter {
     }
 
     fn lua_key_value_table(
-        kv_table_data: &BTreeMap<String, Vec<(Field, DecodedData)>>,
+        kv_table_data: &BTreeMap<String, Vec<(String, LuaValue)>>,
         indent: usize,
     ) -> Result<String, Wh2LuaError> {
         let mut result = String::new();
 
         for (key, value) in kv_table_data.iter() {
             result.push_str(&format!("{}[\"{}\"] = {{ ", "  ".repeat(indent), key));
-            for (field, data) in value.iter() {
-                result.push_str(&Self::decoded_data_to_lua_entry(&field.get_name(), &data)?);
+            for (field_name, data) in value.iter() {
+                result.push_str(&Self::lua_key_value_entry(&field_name, &data)?);
             }
             result.push_str("},\n");
         }
@@ -78,43 +75,25 @@ impl LuaWriter {
     }
 
     fn lua_array_table(
-        arr_table_data: &[Vec<(Field, DecodedData)>],
+        arr_table_data: &[Vec<(String, LuaValue)>],
         indent: usize,
     ) -> Result<String, Wh2LuaError> {
         let mut result = String::new();
         for row in arr_table_data {
             result.push_str(&format!("{}{{ ", "  ".repeat(indent)));
-            for (field, data) in row {
-                result.push_str(&Self::decoded_data_to_lua_entry(field.get_name(), &data)?);
+            for (field_name, data) in row {
+                result.push_str(&Self::lua_key_value_entry(field_name, &data)?);
             }
             result.push_str("},\n");
         }
         Ok(result)
     }
 
-    fn decoded_data_to_lua_entry(
-        field_name: &str,
-        data: &DecodedData,
-    ) -> Result<String, Wh2LuaError> {
+    fn lua_key_value_entry(field_name: &str, data: &LuaValue) -> Result<String, Wh2LuaError> {
         match data {
-            DecodedData::Boolean(value) => Ok(format!("[\"{}\"] = {}, ", field_name, value)),
-            DecodedData::F32(value) => Ok(format!("[\"{}\"] = {}, ", field_name, value)),
-            DecodedData::I16(value) => Ok(format!("[\"{}\"] = {}, ", field_name, value)),
-            DecodedData::I32(value) => Ok(format!("[\"{}\"] = {}, ", field_name, value)),
-            DecodedData::I64(value) => Ok(format!("[\"{}\"] = {}, ", field_name, value)),
-            DecodedData::StringU8(value) => Ok(format!("[\"{}\"] = \"{}\", ", field_name, value)),
-            DecodedData::StringU16(value) => Ok(format!("[\"{}\"] = \"{}\", ", field_name, value)),
-            DecodedData::OptionalStringU8(value) => {
-                Ok(format!("[\"{}\"] = \"{}\", ", field_name, value))
-            }
-            DecodedData::OptionalStringU16(value) => {
-                Ok(format!("[\"{}\"] = \"{}\", ", field_name, value))
-            }
-            DecodedData::SequenceU16(_) | DecodedData::SequenceU32(_) => {
-                return Err(Wh2LuaError::LuaError(
-                    "Cannot convert recursive (sequence) fields to Lua".to_string(),
-                ))
-            }
+            LuaValue::Boolean(value) => Ok(format!("[\"{}\"] = {}, ", field_name, value)),
+            LuaValue::Number(value) => Ok(format!("[\"{}\"] = {}, ", field_name, value)),
+            LuaValue::Text(value) => Ok(format!("[\"{}\"] = \"{}\", ", field_name, value)),
         }
     }
 }

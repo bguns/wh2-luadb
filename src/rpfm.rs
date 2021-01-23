@@ -1,6 +1,6 @@
 use crate::config::Config;
 use crate::log::Log;
-use crate::tw_db_pp::{TableData, TotalWarDbPreProcessed};
+use crate::tw_db_pp::{LuaValue, TableData, TotalWarDbPreProcessed};
 use crate::util;
 use crate::wh2_lua_error::Wh2LuaError;
 
@@ -16,7 +16,6 @@ use rpfm_lib::packedfile::table::db::DB;
 use rpfm_lib::packedfile::table::DecodedData;
 use rpfm_lib::packfile::{PackFile, PathType};
 use rpfm_lib::schema;
-use rpfm_lib::schema::Field;
 use rpfm_lib::schema::Schema;
 
 pub struct Rpfm;
@@ -148,6 +147,22 @@ impl Rpfm {
         )?)
     }
 
+    fn decoded_data_to_lua_value(data: &DecodedData) -> LuaValue {
+        match data {
+            DecodedData::Boolean(value) => LuaValue::Boolean(*value),
+            DecodedData::F32(value) => LuaValue::Number(value.to_string()),
+            DecodedData::I16(value) => LuaValue::Number(value.to_string()),
+            DecodedData::I32(value) => LuaValue::Number(value.to_string()),
+            DecodedData::I64(value) => LuaValue::Number(value.to_string()),
+            DecodedData::StringU8(value)
+            | DecodedData::StringU16(value)
+            | DecodedData::OptionalStringU8(value)
+            | DecodedData::OptionalStringU16(value) => LuaValue::Text(value.to_string()),
+            DecodedData::SequenceU16(_) => LuaValue::Text("SequenceU16".to_string()),
+            DecodedData::SequenceU32(_) => LuaValue::Text("SequenceU32".to_string()),
+        }
+    }
+
     fn convert_rpfm_db_to_preprocessed_db(
         rpfm_db: &DB,
         output_file_path: &Path,
@@ -166,26 +181,29 @@ impl Rpfm {
                 .position(|field| field.get_is_key())
                 .unwrap();
 
-            let mut processed_data: BTreeMap<String, Vec<(Field, DecodedData)>> = BTreeMap::new();
+            let mut processed_data: BTreeMap<String, Vec<(String, LuaValue)>> = BTreeMap::new();
 
             for row in rpfm_data {
                 let key_string = row[key_field_index].data_to_string();
                 processed_data.insert(key_string.clone(), Vec::new());
                 for (field, data) in rpfm_fields.iter().zip(row.iter()) {
-                    processed_data
-                        .get_mut(&key_string)
-                        .unwrap()
-                        .push((field.clone(), data.clone()));
+                    processed_data.get_mut(&key_string).unwrap().push((
+                        field.get_name().to_string(),
+                        Self::decoded_data_to_lua_value(data),
+                    ));
                 }
             }
 
             TableData::KeyValue(processed_data)
         } else {
-            let mut processed_data: Vec<Vec<(Field, DecodedData)>> = Vec::new();
+            let mut processed_data: Vec<Vec<(String, LuaValue)>> = Vec::new();
             for row in rpfm_data {
-                let mut processed_row: Vec<(Field, DecodedData)> = Vec::new();
+                let mut processed_row: Vec<(String, LuaValue)> = Vec::new();
                 for (field, data) in rpfm_fields.iter().zip(row.iter()) {
-                    processed_row.push((field.clone(), data.clone()));
+                    processed_row.push((
+                        field.get_name().to_string(),
+                        Self::decoded_data_to_lua_value(data),
+                    ));
                 }
                 processed_data.push(processed_row);
             }
