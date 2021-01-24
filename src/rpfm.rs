@@ -181,14 +181,14 @@ impl Rpfm {
                 .position(|field| field.get_is_key())
                 .unwrap();
 
-            let mut processed_data: BTreeMap<String, Vec<(String, LuaValue)>> = BTreeMap::new();
+            let mut processed_data: BTreeMap<LuaValue, Vec<(LuaValue, LuaValue)>> = BTreeMap::new();
 
             for row in rpfm_data {
-                let key_string = row[key_field_index].data_to_string();
-                processed_data.insert(key_string.clone(), Vec::new());
+                let key_data = Self::decoded_data_to_lua_value(&row[key_field_index]);
+                processed_data.insert(key_data.clone(), Vec::new());
                 for (field, data) in rpfm_fields.iter().zip(row.iter()) {
-                    processed_data.get_mut(&key_string).unwrap().push((
-                        field.get_name().to_string(),
+                    processed_data.get_mut(&key_data).unwrap().push((
+                        LuaValue::Text(field.get_name().to_string()),
                         Self::decoded_data_to_lua_value(data),
                     ));
                 }
@@ -196,12 +196,12 @@ impl Rpfm {
 
             TableData::KeyValue(processed_data)
         } else {
-            let mut processed_data: Vec<Vec<(String, LuaValue)>> = Vec::new();
+            let mut processed_data: Vec<Vec<(LuaValue, LuaValue)>> = Vec::new();
             for row in rpfm_data {
-                let mut processed_row: Vec<(String, LuaValue)> = Vec::new();
+                let mut processed_row: Vec<(LuaValue, LuaValue)> = Vec::new();
                 for (field, data) in rpfm_fields.iter().zip(row.iter()) {
                     processed_row.push((
-                        field.get_name().to_string(),
+                        LuaValue::Text(field.get_name().to_string()),
                         Self::decoded_data_to_lua_value(data),
                     ));
                 }
@@ -210,6 +210,18 @@ impl Rpfm {
             TableData::FlatArray(processed_data)
         };
 
-        Ok(TotalWarDbPreProcessed::new(data, &output_file_path))
+        let table_name = output_file_path
+            .parent()
+            .unwrap()
+            .file_name()
+            .unwrap()
+            .to_str()
+            .unwrap();
+
+        Ok(TotalWarDbPreProcessed::new(
+            table_name,
+            data,
+            &output_file_path,
+        ))
     }
 }

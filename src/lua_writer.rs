@@ -58,15 +58,19 @@ impl LuaWriter {
     }
 
     fn lua_key_value_table(
-        kv_table_data: &BTreeMap<String, Vec<(String, LuaValue)>>,
+        kv_table_data: &BTreeMap<LuaValue, Vec<(LuaValue, LuaValue)>>,
         indent: usize,
     ) -> Result<String, Wh2LuaError> {
         let mut result = String::new();
 
-        for (key, value) in kv_table_data.iter() {
-            result.push_str(&format!("{}[\"{}\"] = {{ ", "  ".repeat(indent), key));
-            for (field_name, data) in value.iter() {
-                result.push_str(&Self::lua_key_value_entry(&field_name, &data)?);
+        for (key, values) in kv_table_data.iter() {
+            result.push_str(&format!(
+                "{}[{}] = {{ ",
+                "  ".repeat(indent),
+                key.to_lua_value()
+            ));
+            for (k, v) in values.iter() {
+                result.push_str(&Self::lua_key_value_entry(k, v));
             }
             result.push_str("},\n");
         }
@@ -75,25 +79,21 @@ impl LuaWriter {
     }
 
     fn lua_array_table(
-        arr_table_data: &[Vec<(String, LuaValue)>],
+        arr_table_data: &[Vec<(LuaValue, LuaValue)>],
         indent: usize,
     ) -> Result<String, Wh2LuaError> {
         let mut result = String::new();
         for row in arr_table_data {
             result.push_str(&format!("{}{{ ", "  ".repeat(indent)));
-            for (field_name, data) in row {
-                result.push_str(&Self::lua_key_value_entry(field_name, &data)?);
+            for (k, v) in row {
+                result.push_str(&Self::lua_key_value_entry(k, v));
             }
             result.push_str("},\n");
         }
         Ok(result)
     }
 
-    fn lua_key_value_entry(field_name: &str, data: &LuaValue) -> Result<String, Wh2LuaError> {
-        match data {
-            LuaValue::Boolean(value) => Ok(format!("[\"{}\"] = {}, ", field_name, value)),
-            LuaValue::Number(value) => Ok(format!("[\"{}\"] = {}, ", field_name, value)),
-            LuaValue::Text(value) => Ok(format!("[\"{}\"] = \"{}\", ", field_name, value)),
-        }
+    fn lua_key_value_entry(key: &LuaValue, value: &LuaValue) -> String {
+        format!("[{}] = {}, ", key.to_lua_value(), value.to_lua_value())
     }
 }
