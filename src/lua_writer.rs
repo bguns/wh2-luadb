@@ -15,6 +15,12 @@ impl LuaWriter {
         config: &Config,
         table_data: &TotalWarDbPreProcessed,
     ) -> Result<(), Wh2LuaError> {
+        Log::debug(&format!(
+            "Writing db {} to lua file {}",
+            &table_data.table_name,
+            &table_data.output_file_path.display()
+        ));
+
         let mut result = String::new();
         let mut indent: usize = 0;
 

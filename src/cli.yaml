@@ -28,3 +28,15 @@ args:
         value_name: SCRIPT_NAME
         about: The (relative) path to a script file on the VFS. If provided, the resulting lua scripts will only return data if the given script file exists. This can be used as a way to check if a certain mod is loaded.
         takes_value: true
+    - core-prefix:
+        long: core-prefix
+        value_name: PREFIX
+        about: If data__ (core) tables are found, the resulting filename in the "mod_core" folder will be <PREFIX>_data__.lua. Combined with a script-check, this allows for proper conditional loading of the correct core data__ file based on which mods are actually loaded. This option can be omitted when a packfile is targetted, in which case the packfile's name will be prefixed instead.
+        takes_value: true
+    - base-data:
+        long: base
+        about: If this option is used, any data__ tables found will not be prefixed and will be placed in the "core" folder. This should only be used for processing base game data, or base compatibility data for large overhaul mods.
+        conflicts_with: core-prefix
+    - force:
+        long: force
+        about: Normally, in order to ensure clean and correct output, this tool expects the output directory to be empty, and will not continue if this is not so. Setting the --force flag ignores this check, which will simply add resulting files in the proper directories, overwriting them if necessary. Only use this if you know what you're doing.

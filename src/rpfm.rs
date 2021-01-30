@@ -9,7 +9,7 @@ use walkdir::WalkDir;
 use std::collections::BTreeMap;
 use std::fs;
 use std::io::{BufReader, Read};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use rpfm_lib;
 use rpfm_lib::packedfile::table::db::DB;
@@ -48,15 +48,16 @@ impl Rpfm {
     }
 
     pub fn load(config: &Config) -> Result<Vec<TotalWarDbPreProcessed>, Wh2LuaError> {
+        Log::debug("Loading files with RPFM...");
         // If a packfile is specified, we extract the packfile. The input directory for futher steps is the same as the output directory
-        let rpfm_in_dir = if let Some(ref packfile) = config.packfile {
+        let rpfm_in_dir: PathBuf = if let Some(ref packfile) = config.packfile {
             Log::rpfm(&format!(
                 "Extracting db folder from packfile: {}",
                 packfile.display()
             ));
             // Run rpfm extract
             Self::load_packfile(&config)?;
-            config.out_dir.clone()
+            [config.out_dir.as_path(), Path::new("db")].iter().collect()
         }
         // If an input directory is specified instead, we (obviously) use that for later steps
         else {
@@ -67,7 +68,7 @@ impl Rpfm {
                         in_dir.display()
                     )));
                 }
-                in_dir.clone()
+                [in_dir.as_path(), Path::new("db")].iter().collect()
             } else {
                 return Err(Wh2LuaError::ConfigError(format!("Neither packfile nor input directory parameters found in config and/or command arguments.")));
             }
@@ -78,16 +79,51 @@ impl Rpfm {
         #[cfg(not(debug_assertions))]
         Log::set_single_line_log(true);
 
-        for entry in WalkDir::new(rpfm_in_dir.as_path()).min_depth(3) {
+        for entry in WalkDir::new(rpfm_in_dir.as_path()).min_depth(2) {
             let entry = entry.unwrap();
             if entry.path().extension().is_none() {
                 let relative_path = util::strip_db_prefix_from_path(&entry.path());
 
+                let mut file_name_without_extension = entry
+                    .path()
+                    .file_stem()
+                    .unwrap()
+                    .to_str()
+                    .unwrap()
+                    .to_string();
+                let mut table_folder = "mod".to_string();
+
+                if file_name_without_extension == "data__" {
+                    if config.base_mod {
+                        table_folder = "core".to_string();
+                    } else {
+                        table_folder = "mod_core".to_string();
+                        if let Some(core_prefix) = &config.mod_core_prefix {
+                            file_name_without_extension =
+                                format!("{}_{}", core_prefix, &file_name_without_extension);
+                        } else if let Some(packfile) = &config.packfile {
+                            file_name_without_extension = format!(
+                                "{}_{}",
+                                packfile.file_stem().unwrap().to_str().unwrap(),
+                                &file_name_without_extension
+                            );
+                        } else {
+                            return Err(Wh2LuaError::ConfigError(format!("A (core) data__ file was found in the input files, but the --base flag is not set,\n  and no --core-prefix or --packfile was specified.\n  No sensible output filename could be determined.")));
+                        }
+                    }
+                }
+
                 let mut output_file_path = config.out_dir.clone();
                 output_file_path.push("lua_db");
-                output_file_path.push(relative_path.strip_prefix("db").unwrap());
+                output_file_path.push(table_folder);
+                output_file_path.push(relative_path.parent().unwrap().file_name().unwrap());
+                output_file_path.push(file_name_without_extension);
                 output_file_path = output_file_path.with_extension("lua");
                 fs::create_dir_all(&output_file_path.parent().unwrap())?;
+
+                if output_file_path.exists() {
+                    Log::add_overwritten_file(format!("{}", output_file_path.display()));
+                }
 
                 Log::rpfm(&format!("Loading file: {}", relative_path.display()));
 
@@ -125,6 +161,11 @@ impl Rpfm {
         rpfm_db_file: &Path,
         output_file_path: &Path,
     ) -> Result<TotalWarDbPreProcessed, Wh2LuaError> {
+        Log::debug(&format!(
+            "Pre-processing db file {} to output {}",
+            rpfm_db_file.display(),
+            output_file_path.display()
+        ));
         let mut data = vec![];
 
         {

@@ -7,6 +7,7 @@ use crossterm::terminal::{Clear, ClearType, DisableLineWrap, EnableLineWrap};
 use std::io::stderr;
 
 static mut SINGLE_LINE: bool = false;
+static mut FILES_OVERWRITTEN: Vec<String> = Vec::new();
 
 pub struct Log {}
 
@@ -33,7 +34,7 @@ impl Log {
         Self::print_log(&format!("{}", error));
     }
 
-    pub fn _warning(warning_text: &str) {
+    pub fn warning(warning_text: &str) {
         Self::print_log(&format!("{} {}", "[WARNING]".yellow(), warning_text));
     }
 
@@ -60,6 +61,23 @@ impl Log {
                 execute!(stderr, DisableLineWrap).unwrap();
             } else {
                 execute!(stderr, EnableLineWrap).unwrap();
+            }
+        }
+    }
+
+    pub fn add_overwritten_file(file_path_str: String) {
+        unsafe {
+            FILES_OVERWRITTEN.push(file_path_str);
+        }
+    }
+
+    pub fn print_overwritten_files() {
+        unsafe {
+            if !&FILES_OVERWRITTEN.is_empty() {
+                Self::warning("files overwritten: ");
+                for file_path in &FILES_OVERWRITTEN {
+                    eprintln!("{}", file_path);
+                }
             }
         }
     }

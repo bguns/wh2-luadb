@@ -13,6 +13,9 @@ pub struct Config {
     pub in_dir: Option<PathBuf>,
     pub out_dir: PathBuf,
     pub script_check: Option<String>,
+    pub mod_core_prefix: Option<String>,
+    pub base_mod: bool,
+    pub force: bool,
 }
 
 impl Config {
@@ -70,6 +73,12 @@ impl Config {
 
         let script_check = matches.value_of("script-check").map(str::to_string);
 
+        let mod_core_prefix = matches.value_of("core-prefix").map(str::to_string);
+
+        let base_mod = matches.is_present("base-data");
+
+        let force = matches.is_present("force");
+
         let schema = Rpfm::load_schema()?;
 
         Ok(Config {
@@ -78,6 +87,9 @@ impl Config {
             in_dir: in_dir_path,
             out_dir: out_dir_path,
             script_check,
+            mod_core_prefix,
+            base_mod,
+            force,
         })
     }
 }

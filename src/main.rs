@@ -21,6 +21,7 @@ fn main() {
     if let Err(error) = do_the_things() {
         Log::error(&error);
     } else {
+        Log::print_overwritten_files();
         Log::info("all gucci!");
     }
 }
@@ -54,7 +55,7 @@ fn do_the_things() -> Result<(), Wh2LuaError> {
 fn prepare_output_dir(config: &Config) -> Result<(), Wh2LuaError> {
     fs::create_dir_all(&config.out_dir)?;
     // Directory is empty if its iterator has no elements
-    if !&config.out_dir.read_dir()?.next().is_none() {
+    if !&config.force && !&config.out_dir.read_dir()?.next().is_none() {
         return Err(Wh2LuaError::OutDirNotEmpty(config.out_dir.clone()));
     }
     Ok(())
