@@ -25,8 +25,8 @@ impl LuaWriter {
         let mut indent: usize = 0;
 
         if let Some(script_check) = &config.script_check {
-            result.push_str("local result = {}\n\n");
-            result.push_str(&format!("if vfs.exists(\"{}\") {{\n", script_check));
+            result.push_str("local result = nil\n\n");
+            result.push_str(&format!("if vfs.exists(\"{}\") then\n", script_check));
             indent += 1;
             result.push_str(&format!("{}result = {{\n", "  ".repeat(indent)));
         } else {
@@ -49,13 +49,21 @@ impl LuaWriter {
             }
         }
 
+        indent -= 1;
+
+        result.push_str(&format!("{}}}\n", "  ".repeat(indent)));
+
+        if config.script_check.is_some() {
+            indent -= 1;
+            result.push_str(&format!("{}end\n", "  ".repeat(indent)));
+        }
+
         while indent > 1 {
             indent -= 1;
             result.push_str(&format!("{}}}\n", "  ".repeat(indent)));
         }
 
-        result.push_str("}\n\n");
-        result.push_str("return result");
+        result.push_str("\nreturn result");
 
         let mut out_file = fs::File::create(&table_data.output_file_path)?;
         out_file.write_all(result.as_bytes())?;
