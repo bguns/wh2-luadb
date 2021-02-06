@@ -20,12 +20,17 @@ pub struct Config {
     pub mod_core_prefix: Option<String>,
     pub base_mod: bool,
     pub force: bool,
+    pub launch_game: bool,
 }
 
 impl Config {
     pub fn from_matches(matches: &ArgMatches) -> Result<Config, Wh2LuaError> {
         let packfile_path_arg = matches.value_of("packfile");
         let in_dir_path_arg = matches.value_of("input-directory");
+
+        let launch_game = packfile_path_arg.is_none()
+            && in_dir_path_arg.is_none()
+            && Path::new("./Warhammer2_real.exe").exists();
 
         let packfile_paths = if packfile_path_arg.is_none() && in_dir_path_arg.is_none() {
             let mut packfiles: Vec<PathBuf> = Vec::new();
@@ -146,6 +151,7 @@ impl Config {
             mod_core_prefix,
             base_mod,
             force,
+            launch_game,
         })
     }
 }

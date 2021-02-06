@@ -10,6 +10,7 @@ use colored::Colorize;
 use crossterm::event::read;
 
 use std::fs;
+use std::process::Command;
 
 mod config;
 mod log;
@@ -21,19 +22,31 @@ mod util;
 mod wh2_lua_error;
 
 fn main() {
-    if let Err(error) = do_the_things() {
-        Log::error(&error);
-    } else {
-        Log::print_overwritten_files();
-        Log::info("all gucci!");
-    }
-    #[cfg(debug_assertions)]
-    match read().unwrap() {
-        _ => {}
+    let res = do_the_things();
+    match res {
+        Err(ref error) => {
+            Log::error(&error);
+            match read().unwrap() {
+                _ => {}
+            }
+        }
+        Ok(ref config) => {
+            Log::print_overwritten_files();
+            Log::info("all gucci!");
+            #[cfg(debug_assertions)]
+            match read().unwrap() {
+                _ => {}
+            }
+
+            Log::debug(&format!("Config: launch_game = {}", config.launch_game));
+            if config.launch_game {
+                Command::new("./Warhammer2_real.exe").output().unwrap();
+            }
+        }
     }
 }
 
-fn do_the_things() -> Result<(), Wh2LuaError> {
+fn do_the_things() -> Result<Config, Wh2LuaError> {
     let yaml = load_yaml!("cli.yaml");
     let matches = App::from(yaml).get_matches();
 
@@ -62,7 +75,7 @@ fn do_the_things() -> Result<(), Wh2LuaError> {
         Log::set_single_line_log(false);
     }
 
-    Ok(())
+    Ok(config)
 }
 
 fn prepare_output_dir(config: &Config) -> Result<(), Wh2LuaError> {
