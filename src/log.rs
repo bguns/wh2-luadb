@@ -1,7 +1,7 @@
 use crate::Wh2LuaError;
-use colored::Colorize;
 use crossterm::cursor::MoveToColumn;
 use crossterm::execute;
+use crossterm::style::Colorize;
 use crossterm::terminal::{Clear, ClearType, DisableLineWrap, EnableLineWrap};
 
 use std::io::stderr;
