@@ -11,10 +11,14 @@ use std::fs;
 use std::io::{BufReader, Read};
 use std::path::{Path, PathBuf};
 
+use rpfm_error;
+
 use rpfm_lib;
 use rpfm_lib::packedfile::table::db::DB;
 use rpfm_lib::packedfile::table::DecodedData;
-use rpfm_lib::packfile::{PackFile, PathType};
+use rpfm_lib::packedfile::PackedFileType;
+use rpfm_lib::packfile::packedfile::RawPackedFile;
+use rpfm_lib::packfile::PackFile;
 use rpfm_lib::schema;
 use rpfm_lib::schema::Schema;
 
@@ -47,52 +51,63 @@ impl Rpfm {
         )?)
     }
 
+    fn decode_db_packed_file(
+        raw_packed_file: &mut RawPackedFile,
+        schema: &Schema,
+    ) -> Result<DB, Wh2LuaError> {
+        match PackedFileType::get_packed_file_type(raw_packed_file.get_path()) {
+            PackedFileType::DB => {
+                let data = raw_packed_file.get_data_and_keep_it()?;
+                let name = raw_packed_file.get_path().get(1).ok_or_else(|| {
+                    Wh2LuaError::RpfmError(rpfm_error::Error::from(
+                        rpfm_error::ErrorKind::DBTableIsNotADBTable,
+                    ))
+                })?;
+                let packed_file = DB::read(&data, &name, &schema, false)?;
+                Ok(packed_file)
+            }
+            _ => {
+                return Err(Wh2LuaError::RpfmError(rpfm_error::Error::from(
+                    rpfm_error::ErrorKind::DBTableIsNotADBTable,
+                )))
+            }
+        }
+    }
+
     pub fn load(config: &Config) -> Result<Vec<TotalWarDbPreProcessed>, Wh2LuaError> {
         Log::debug("Loading files with RPFM...");
+
+        let mut result: Vec<TotalWarDbPreProcessed> = Vec::new();
         // If a packfile is specified, we extract the packfile. The input directory for futher steps is the same as the output directory
-        let rpfm_in_dir: PathBuf = if let Some(ref packfile) = config.packfile {
+        if let Some(ref packfile) = config.packfile {
             Log::rpfm(&format!(
-                "Extracting db folder from packfile: {}",
+                "Loading db files from packfile: {}",
                 packfile.display()
             ));
             // Run rpfm extract
-            Self::load_packfile(&config)?;
-            [config.out_dir.as_path(), Path::new("db")].iter().collect()
-        }
-        // If an input directory is specified instead, we (obviously) use that for later steps
-        else {
-            if let Some(ref in_dir) = config.in_dir {
-                if !in_dir.exists() {
-                    return Err(Wh2LuaError::ConfigError(format!(
-                        "Input directory not found at specified path: {}",
-                        in_dir.display()
-                    )));
-                }
-                [in_dir.as_path(), Path::new("db")].iter().collect()
-            } else {
-                return Err(Wh2LuaError::ConfigError(format!("Neither packfile nor input directory parameters found in config and/or command arguments.")));
-            }
-        };
+            let packfile = Self::load_packfile(&config)?;
 
-        let mut result: Vec<TotalWarDbPreProcessed> = Vec::new();
+            let mut packed_db_files = packfile.get_packed_files_by_type(PackedFileType::DB, true);
 
-        #[cfg(not(debug_assertions))]
-        Log::set_single_line_log(true);
+            for pf in packed_db_files.iter_mut() {
+                let pf_file_name = pf.get_path().last().unwrap().clone();
+                Log::rpfm(&format!(
+                    "Getting DB from: {}, type is {} ",
+                    pf_file_name,
+                    PackedFileType::get_packed_file_type_by_data(pf)
+                ));
+                let db = Self::decode_db_packed_file(pf.get_ref_mut_raw(), &config.schema)?;
+                /*let db = match pf_decoded {
+                    DecodedPackedFile::DB(data) => data,
+                    _ => {
+                        return Err(Wh2LuaError::RpfmError(rpfm_error::Error::from(
+                            rpfm_error::ErrorKind::DBTableIsNotADBTable,
+                        )));
+                    }
+                };*/
 
-        for entry in WalkDir::new(rpfm_in_dir.as_path()).min_depth(2) {
-            let entry = entry.unwrap();
-            if entry.path().extension().is_none() {
-                let relative_path = util::strip_db_prefix_from_path(&entry.path());
-
-                let mut file_name_without_extension = entry
-                    .path()
-                    .file_stem()
-                    .unwrap()
-                    .to_str()
-                    .unwrap()
-                    .to_string();
+                let mut file_name_without_extension = pf_file_name.to_string();
                 let mut table_folder = "mod".to_string();
-
                 if file_name_without_extension == "data__" {
                     if config.base_mod {
                         table_folder = "core".to_string();
@@ -116,7 +131,7 @@ impl Rpfm {
                 let mut output_file_path = config.out_dir.clone();
                 output_file_path.push("lua_db");
                 output_file_path.push(table_folder);
-                output_file_path.push(relative_path.parent().unwrap().file_name().unwrap());
+                output_file_path.push(db.get_table_name());
                 output_file_path.push(file_name_without_extension);
                 output_file_path = output_file_path.with_extension("lua");
                 fs::create_dir_all(&output_file_path.parent().unwrap())?;
@@ -125,35 +140,101 @@ impl Rpfm {
                     Log::add_overwritten_file(format!("{}", output_file_path.display()));
                 }
 
-                Log::rpfm(&format!("Loading file: {}", relative_path.display()));
-
-                Log::debug(&format!("Input file: {}", entry.path().display()));
-
-                result.push(Self::pre_process_db_file(
-                    &config,
-                    &entry.path(),
+                result.push(Self::convert_rpfm_db_to_preprocessed_db(
+                    &db,
                     &output_file_path,
                 )?);
             }
         }
+        // If an input directory is specified instead, we (obviously) use that for later steps
+        else {
+            if let Some(ref in_dir) = config.in_dir {
+                if !in_dir.exists() {
+                    return Err(Wh2LuaError::ConfigError(format!(
+                        "Input directory not found at specified path: {}",
+                        in_dir.display()
+                    )));
+                }
+                let rpfm_in_dir: PathBuf = [in_dir.as_path(), Path::new("db")].iter().collect();
+                for entry in WalkDir::new(rpfm_in_dir.as_path()).min_depth(2) {
+                    let entry = entry.unwrap();
+                    if entry.path().extension().is_none() {
+                        let relative_path = util::strip_db_prefix_from_path(&entry.path());
 
-        Log::set_single_line_log(false);
+                        let mut file_name_without_extension = entry
+                            .path()
+                            .file_stem()
+                            .unwrap()
+                            .to_str()
+                            .unwrap()
+                            .to_string();
+                        let mut table_folder = "mod".to_string();
+
+                        if file_name_without_extension == "data__" {
+                            if config.base_mod {
+                                table_folder = "core".to_string();
+                            } else {
+                                table_folder = "mod_core".to_string();
+                                if let Some(core_prefix) = &config.mod_core_prefix {
+                                    file_name_without_extension =
+                                        format!("{}_{}", core_prefix, &file_name_without_extension);
+                                } else if let Some(packfile) = &config.packfile {
+                                    file_name_without_extension = format!(
+                                        "{}_{}",
+                                        packfile.file_stem().unwrap().to_str().unwrap(),
+                                        &file_name_without_extension
+                                    );
+                                } else {
+                                    return Err(Wh2LuaError::ConfigError(format!("A (core) data__ file was found in the input files, but the --base flag is not set,\n  and no --core-prefix or --packfile was specified.\n  No sensible output filename could be determined.")));
+                                }
+                            }
+                        }
+
+                        let mut output_file_path = config.out_dir.clone();
+                        output_file_path.push("lua_db");
+                        output_file_path.push(table_folder);
+                        output_file_path.push(relative_path.parent().unwrap().file_name().unwrap());
+                        output_file_path.push(file_name_without_extension);
+                        output_file_path = output_file_path.with_extension("lua");
+                        fs::create_dir_all(&output_file_path.parent().unwrap())?;
+
+                        if output_file_path.exists() {
+                            Log::add_overwritten_file(format!("{}", output_file_path.display()));
+                        }
+
+                        Log::rpfm(&format!("Loading file: {}", relative_path.display()));
+
+                        Log::debug(&format!("Input file: {}", entry.path().display()));
+
+                        result.push(Self::pre_process_db_file(
+                            &config,
+                            &entry.path(),
+                            &output_file_path,
+                        )?);
+                    }
+                }
+            } else {
+                return Err(Wh2LuaError::ConfigError(format!("Neither packfile nor input directory parameters found in config and/or command arguments.")));
+            }
+        };
+
+        /*#[cfg(not(debug_assertions))]
+        Log::set_single_line_log(true);
+
+        Log::set_single_line_log(false);*/
 
         Ok(result)
     }
 
-    fn load_packfile(config: &Config) -> Result<(), Wh2LuaError> {
-        let mut packfile = PackFile::open_packfiles(
+    fn load_packfile(config: &Config) -> Result<PackFile, Wh2LuaError> {
+        let packfile = PackFile::open_packfiles(
             &[config.packfile.as_ref().unwrap().clone()],
             true,
             false,
             false,
         )?;
-        let paths = vec![PathType::Folder(vec!["db".to_string()])];
 
-        packfile.extract_packed_files_by_type(&paths, &config.out_dir)?;
-
-        Ok(())
+        Ok(packfile)
     }
 
     pub fn pre_process_db_file(

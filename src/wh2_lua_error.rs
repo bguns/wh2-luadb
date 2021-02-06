@@ -3,6 +3,7 @@ use colored::Colorize;
 use std::fmt;
 use std::path::PathBuf;
 
+use csv;
 use rpfm_error;
 
 #[derive(Debug)]
@@ -23,6 +24,18 @@ impl From<std::io::Error> for Wh2LuaError {
 impl From<rpfm_error::Error> for Wh2LuaError {
     fn from(err: rpfm_error::Error) -> Self {
         Wh2LuaError::RpfmError(err)
+    }
+}
+
+impl From<csv::Error> for Wh2LuaError {
+    fn from(err: csv::Error) -> Self {
+        Wh2LuaError::RpfmError(err.into())
+    }
+}
+
+impl From<std::num::ParseIntError> for Wh2LuaError {
+    fn from(err: std::num::ParseIntError) -> Self {
+        Wh2LuaError::RpfmError(err.into())
     }
 }
 

@@ -61,12 +61,15 @@ impl Config {
                 dir
             } else {
                 if let Some(ref in_dir) = in_dir_path {
-                    Log::info(&format!("Outpt directory (not specified in config/arguments, using same as input directory): {}", in_dir.to_str().unwrap()));
+                    Log::info(&format!("Outpt directory not specified in config/arguments, using same as input directory): {}", in_dir.to_str().unwrap()));
                     in_dir.clone()
                 } else {
-                    return Err(Wh2LuaError::ConfigError(format!(
-                        "No packfile or input directory specified in config/arguments."
-                    )));
+                    Log::info(&format!(
+                        "Output directory not specified, using .\\lua_db_export"
+                    ));
+                    let mut path = std::env::current_dir()?;
+                    path.push("lua_db_export");
+                    path.canonicalize()?
                 }
             }
         };

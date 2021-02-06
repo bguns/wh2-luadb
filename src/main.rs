@@ -12,6 +12,7 @@ use std::fs;
 mod config;
 mod log;
 mod lua_writer;
+mod manifest;
 mod rpfm;
 mod tw_db_pp;
 mod util;

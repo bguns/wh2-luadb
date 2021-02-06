@@ -1805,7 +1805,7 @@ dependencies = [
 
 [[package]]
 name = "rpfm_error"
-version = "2.3.100"
+version = "2.3.101"
 dependencies = [
  "backtrace",
  "bincode",
@@ -1829,7 +1829,7 @@ dependencies = [
 
 [[package]]
 name = "rpfm_lib"
-version = "2.3.100"
+version = "2.3.101"
 dependencies = [
  "bincode",
  "bitflags",
@@ -1865,7 +1865,7 @@ dependencies = [
 
 [[package]]
 name = "rpfm_macros"
-version = "2.3.100"
+version = "2.3.101"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2550,8 +2550,10 @@ dependencies = [
  "clap",
  "colored",
  "crossterm",
+ "csv",
  "rpfm_error",
  "rpfm_lib",
+ "serde",
  "serde_json",
  "tinyfiledialogs",
  "walkdir",
