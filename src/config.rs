@@ -69,7 +69,7 @@ impl Config {
                     ));
                     let mut path = std::env::current_dir()?;
                     path.push("lua_db_export");
-                    path.canonicalize()?
+                    path
                 }
             }
         };

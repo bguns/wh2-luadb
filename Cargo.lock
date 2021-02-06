@@ -2191,16 +2191,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tinyfiledialogs"
-version = "3.3.10"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c45fb26c3f37d9a8b556e51f6d7f13f685af766017030af56e9247e638aa6194"
-dependencies = [
- "cc",
- "libc",
-]
-
-[[package]]
 name = "tinystr"
 version = "0.3.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2551,11 +2541,11 @@ dependencies = [
  "colored",
  "crossterm",
  "csv",
+ "directories",
  "rpfm_error",
  "rpfm_lib",
  "serde",
  "serde_json",
- "tinyfiledialogs",
  "walkdir",
 ]
 

@@ -7,6 +7,8 @@ use crate::wh2_lua_error::Wh2LuaError;
 use clap::{load_yaml, App};
 use colored::Colorize;
 
+use crossterm::event::read;
+
 use std::fs;
 
 mod config;
@@ -25,6 +27,10 @@ fn main() {
         Log::print_overwritten_files();
         Log::info("all gucci!");
     }
+    #[cfg(debug_assertions)]
+    match read().unwrap() {
+        _ => {}
+    }
 }
 
 fn do_the_things() -> Result<(), Wh2LuaError> {
@@ -37,18 +43,24 @@ fn do_the_things() -> Result<(), Wh2LuaError> {
     Log::info(&format!("Config {}", "OK".green()));
 
     Log::info("Loading files with RPFM...");
-    let preprocessed_tables = Rpfm::load(&config)?;
+    let preprocessed_packfiles = Rpfm::load(&config)?;
 
     Log::info("Writing data to Lua scripts...");
+    let mut packfile_names: Vec<_> = preprocessed_packfiles.keys().cloned().collect();
+    packfile_names.reverse();
 
-    #[cfg(not(debug_assertions))]
-    Log::set_single_line_log(true);
+    for packfile_name in packfile_names {
+        Log::info(&format!("Generating Lua data for {}", packfile_name));
 
-    for table in preprocessed_tables {
-        LuaWriter::write_tw_db_to_lua_file(&config, &table)?;
+        #[cfg(not(debug_assertions))]
+        Log::set_single_line_log(true);
+
+        for table in preprocessed_packfiles.get(&packfile_name).unwrap() {
+            LuaWriter::write_tw_db_to_lua_file(&config, &table)?;
+        }
+
+        Log::set_single_line_log(false);
     }
-
-    Log::set_single_line_log(false);
 
     Ok(())
 }
