@@ -4,13 +4,11 @@ use crate::tw_db_pp::{LuaValue, TableData, TotalWarDbPreProcessed};
 use crate::util;
 use crate::wh2_lua_error::Wh2LuaError;
 
-use directories::ProjectDirs;
-
 use walkdir::WalkDir;
 
 use std::collections::BTreeMap;
 use std::fs;
-use std::io::{BufRead, BufReader, Read};
+use std::io::{BufReader, Read};
 use std::path::{Path, PathBuf};
 
 use rpfm_error;
@@ -82,53 +80,11 @@ impl Rpfm {
         Log::debug("Loading files with RPFM...");
 
         let mut result: BTreeMap<String, Vec<TotalWarDbPreProcessed>> = BTreeMap::new();
-        let mut packfiles: Vec<PathBuf> = Vec::new();
+        let packfiles: &Option<Vec<PathBuf>> = &config.packfiles;
 
-        // if no packfile or in_dir is specified, we load KMM last_profile packfiles
-        if config.packfile.is_none() && config.in_dir.is_none() {
-            Log::debug("No packfile and no in dir specified, looking for KMM last used profile...");
-            let kmm_last_used_file: PathBuf =
-                match ProjectDirs::from("", "", "Kaedrin Mod Manager") {
-                    Some(dirs) => [
-                        dirs.config_dir().parent().unwrap(),
-                        &Path::new("Profiles"),
-                        &Path::new("Warhammer2"),
-                        &Path::new("profile_LastUsedMods.txt"),
-                    ]
-                    .iter()
-                    .collect(),
-                    None => return Err(Wh2LuaError::ConfigError(
-                        "No packfile or input dir specified, and KMM profiles dir cannot be found"
-                            .to_string(),
-                    )),
-                };
-
-            if !kmm_last_used_file.exists() {
-                return Err(Wh2LuaError::ConfigError(
-                    "No packfile or input dir specified, and KMM profiles dir cannot be found"
-                        .to_string(),
-                ));
-            }
-
-            let mut packfiles_names: Vec<String>;
-            {
-                let file = fs::File::open(kmm_last_used_file)?;
-                let reader = BufReader::new(&file);
-                packfiles_names = reader.lines().collect::<Result<_, _>>()?;
-            }
-            packfiles_names.reverse();
-
-            for name in packfiles_names {
-                Log::debug(&format!("Packfile in KMM last profile: {}", name));
-                packfiles.push([Path::new("data"), Path::new(&name)].iter().collect());
-            }
-        } else if let Some(ref packfile) = config.packfile {
-            packfiles.push(packfile.clone());
-        }
-
-        if packfiles.len() > 0 {
+        if packfiles.is_some() && packfiles.as_ref().unwrap().len() > 0 {
             // Run rpfm load
-            for packfile_path in packfiles {
+            for packfile_path in packfiles.as_ref().unwrap() {
                 Log::info(&format!("Processing packfile: {}", packfile_path.display()));
                 let packfile = Self::load_packfile(&packfile_path)?;
 
@@ -137,13 +93,12 @@ impl Rpfm {
                 let mut packed_db_files =
                     packfile.get_packed_files_by_type(PackedFileType::DB, true);
 
+                #[cfg(not(debug_assertions))]
+                Log::set_single_line_log(true);
+
                 for pf in packed_db_files.iter_mut() {
+                    Log::rpfm(&format!("Processing db file: {}", pf.get_path().join("/")));
                     let pf_file_name = pf.get_path().last().unwrap().clone();
-                    Log::rpfm(&format!(
-                        "Getting DB from: {}, type is {} ",
-                        pf_file_name,
-                        PackedFileType::get_packed_file_type_by_data(pf)
-                    ));
                     let db = Self::decode_db_packed_file(pf.get_ref_mut_raw(), &config.schema)?;
 
                     let mut file_name_without_extension = pf_file_name.to_string();
@@ -195,6 +150,8 @@ impl Rpfm {
                         .to_string(),
                     pf_processed_result,
                 );
+
+                Log::set_single_line_log(false);
             }
         }
         // If an input directory is specified instead, we (obviously) use that for later steps
@@ -209,6 +166,9 @@ impl Rpfm {
                 let rpfm_in_dir: PathBuf = [in_dir.as_path(), Path::new("db")].iter().collect();
 
                 let mut dir_result: Vec<TotalWarDbPreProcessed> = Vec::new();
+
+                #[cfg(not(debug_assertions))]
+                Log::set_single_line_log(true);
 
                 for entry in WalkDir::new(rpfm_in_dir.as_path()).min_depth(2) {
                     let entry = entry.unwrap();
@@ -232,12 +192,6 @@ impl Rpfm {
                                 if let Some(core_prefix) = &config.mod_core_prefix {
                                     file_name_without_extension =
                                         format!("{}_{}", core_prefix, &file_name_without_extension);
-                                } else if let Some(packfile) = &config.packfile {
-                                    file_name_without_extension = format!(
-                                        "{}_{}",
-                                        packfile.file_stem().unwrap().to_str().unwrap(),
-                                        &file_name_without_extension
-                                    );
                                 } else {
                                     return Err(Wh2LuaError::ConfigError(format!("A (core) data__ file was found in the input files, but the --base flag is not set,\n  and no --core-prefix or --packfile was specified.\n  No sensible output filename could be determined.")));
                                 }
@@ -268,16 +222,13 @@ impl Rpfm {
                     }
                 }
 
+                Log::set_single_line_log(false);
+
                 result.insert("directory".to_string(), dir_result);
             } else {
                 return Err(Wh2LuaError::ConfigError(format!("Neither packfile nor input directory parameters found in config and/or command arguments.")));
             }
         };
-
-        /*#[cfg(not(debug_assertions))]
-        Log::set_single_line_log(true);
-
-        Log::set_single_line_log(false);*/
 
         Ok(result)
     }

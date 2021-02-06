@@ -1,5 +1,9 @@
+use std::fs;
+use std::io::{BufRead, BufReader};
+use std::path::{Path, PathBuf};
+
 use clap::ArgMatches;
-use std::path::PathBuf;
+use directories::ProjectDirs;
 
 use crate::log::Log;
 use crate::rpfm::Rpfm;
@@ -9,7 +13,7 @@ use rpfm_lib::schema::Schema;
 
 pub struct Config {
     pub schema: Schema,
-    pub packfile: Option<PathBuf>,
+    pub packfiles: Option<Vec<PathBuf>>,
     pub in_dir: Option<PathBuf>,
     pub out_dir: PathBuf,
     pub script_check: Option<String>,
@@ -20,7 +24,51 @@ pub struct Config {
 
 impl Config {
     pub fn from_matches(matches: &ArgMatches) -> Result<Config, Wh2LuaError> {
-        let packfile_path = if let Some(packfile) = matches.value_of("packfile") {
+        let packfile_path_arg = matches.value_of("packfile");
+        let in_dir_path_arg = matches.value_of("input-directory");
+
+        let packfile_paths = if packfile_path_arg.is_none() && in_dir_path_arg.is_none() {
+            let mut packfiles: Vec<PathBuf> = Vec::new();
+
+            Log::info("No packfile and no in dir specified, looking for KMM last used profile...");
+            let kmm_last_used_file: PathBuf =
+                match ProjectDirs::from("", "", "Kaedrin Mod Manager") {
+                    Some(dirs) => [
+                        dirs.config_dir().parent().unwrap(),
+                        &Path::new("Profiles"),
+                        &Path::new("Warhammer2"),
+                        &Path::new("profile_LastUsedMods.txt"),
+                    ]
+                    .iter()
+                    .collect(),
+                    None => return Err(Wh2LuaError::ConfigError(
+                        "No packfile or input dir specified, and KMM profiles dir cannot be found"
+                            .to_string(),
+                    )),
+                };
+
+            if !kmm_last_used_file.exists() {
+                return Err(Wh2LuaError::ConfigError(
+                    "No packfile or input dir specified, and KMM profiles dir cannot be found"
+                        .to_string(),
+                ));
+            }
+
+            let mut packfiles_names: Vec<String>;
+            {
+                let file = fs::File::open(kmm_last_used_file)?;
+                let reader = BufReader::new(&file);
+                packfiles_names = reader.lines().collect::<Result<_, _>>()?;
+            }
+            packfiles_names.reverse();
+
+            for name in packfiles_names {
+                Log::debug(&format!("Packfile in KMM last profile: {}", name));
+                packfiles.push([Path::new("data"), Path::new(&name)].iter().collect());
+            }
+
+            Some(packfiles)
+        } else if let Some(packfile) = packfile_path_arg {
             let packfile_path = PathBuf::from(packfile);
             if !packfile_path.exists() {
                 return Err(Wh2LuaError::ConfigError(format!(
@@ -28,20 +76,24 @@ impl Config {
                     packfile_path.display()
                 )));
             }
-            Some(packfile_path)
+            Some(vec![packfile_path])
         } else {
             None
         };
 
-        let in_dir_path = if let Some(directory) = matches.value_of("input-directory") {
-            let in_dir_path = PathBuf::from(directory);
-            if !in_dir_path.exists() {
-                return Err(Wh2LuaError::ConfigError(format!(
-                    "Input directory with specified path not found: {}",
-                    in_dir_path.display()
-                )));
+        let in_dir_path = if packfile_paths.is_none() {
+            if let Some(directory) = in_dir_path_arg {
+                let in_dir_path = PathBuf::from(directory);
+                if !in_dir_path.exists() {
+                    return Err(Wh2LuaError::ConfigError(format!(
+                        "Input directory with specified path not found: {}",
+                        in_dir_path.display()
+                    )));
+                }
+                Some(in_dir_path)
+            } else {
+                None
             }
-            Some(in_dir_path)
         } else {
             None
         };
@@ -49,7 +101,8 @@ impl Config {
         let out_dir_path = if let Some(output_dir) = matches.value_of("output-directory") {
             PathBuf::from(output_dir)
         } else {
-            if let Some(ref packfile) = packfile_path {
+            if packfile_paths.is_some() && packfile_paths.as_ref().unwrap().len() == 1 {
+                let packfile = packfile_paths.as_ref().unwrap().get(0).unwrap();
                 let packfile_dir = packfile.parent().unwrap();
                 let packfile_name = packfile.file_stem().unwrap();
                 let mut dir = PathBuf::from(packfile_dir);
@@ -86,7 +139,7 @@ impl Config {
 
         Ok(Config {
             schema,
-            packfile: packfile_path,
+            packfiles: packfile_paths,
             in_dir: in_dir_path,
             out_dir: out_dir_path,
             script_check,

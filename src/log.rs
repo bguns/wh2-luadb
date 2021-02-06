@@ -23,7 +23,7 @@ impl Log {
     }
 
     pub fn rpfm(message: &str) {
-        Self::print_log(&format!("{} {}", "  [RPFM]".magenta(), message));
+        Self::print_log(&format!("{} {}", "[RPFM]".magenta(), message));
     }
 
     pub fn _error(error_text: &str) {
