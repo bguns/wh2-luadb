@@ -9,6 +9,7 @@ use std::io::stderr;
 static mut SINGLE_LINE: bool = false;
 static mut FILES_OVERWRITTEN: Vec<String> = Vec::new();
 
+/// Provides static functions to log things to console (through stderr)
 pub struct Log {}
 
 impl Log {
@@ -16,6 +17,7 @@ impl Log {
         Self::print_log(&format!("{} {}", "[INFO]".blue(), info_text));
     }
 
+    /// Logs "\[DEBUG\] text", but only on --debug builds
     #[allow(unused_variables)]
     pub fn debug(text: &str) {
         #[cfg(debug_assertions)]
@@ -24,10 +26,6 @@ impl Log {
 
     pub fn rpfm(message: &str) {
         Self::print_log(&format!("{} {}", "[RPFM]".magenta(), message));
-    }
-
-    pub fn _error(error_text: &str) {
-        Self::print_log(&format!("{} {}", "[ERROR]".red(), error_text));
     }
 
     pub fn error(error: &Wh2LuaError) {
@@ -50,6 +48,7 @@ impl Log {
         }
     }
 
+    /// Sets the flag that controls if log messages should be print on the same line (true) (clearing the previous message), or if each message should appear on a newline (false).
     pub fn set_single_line_log(single_line: bool) {
         unsafe {
             let mut stderr = stderr();
@@ -65,12 +64,14 @@ impl Log {
         }
     }
 
+    /// Add a String representation of a file path to the (static) list of overwritten files
     pub fn add_overwritten_file(file_path_str: String) {
         unsafe {
             FILES_OVERWRITTEN.push(file_path_str);
         }
     }
 
+    /// Logs all files in the static list of overwritten files
     pub fn print_overwritten_files() {
         unsafe {
             if !&FILES_OVERWRITTEN.is_empty() {

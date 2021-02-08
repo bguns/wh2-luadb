@@ -5,9 +5,9 @@ use crate::rpfm::Rpfm;
 use crate::wh2_lua_error::Wh2LuaError;
 
 use clap::{load_yaml, App};
-use colored::Colorize;
 
 use crossterm::event::read;
+use crossterm::style::Colorize;
 
 use std::fs;
 use std::process::Command;
@@ -23,13 +23,17 @@ mod wh2_lua_error;
 
 fn main() {
     let res = do_the_things();
+
     match res {
+        // On error, log the error and wait for keypress to quit
         Err(ref error) => {
             Log::error(&error);
             match read().unwrap() {
                 _ => {}
             }
         }
+
+        // On success, only wait for keystroke in debug mode, and launch game if needed
         Ok(ref config) => {
             Log::print_overwritten_files();
             Log::info("all gucci!");
@@ -46,8 +50,12 @@ fn main() {
     }
 }
 
+/// Runs the application code, breaking off and returning a Wh2LuaError as soon as an unrecoverable error is encoutered.
+/// Returns the Config struct on success for the app to use in end/cleanup step.
 fn do_the_things() -> Result<Config, Wh2LuaError> {
+    // Load the CLAP configuration. This happens at compile time
     let yaml = load_yaml!("cli.yaml");
+
     let matches = App::from(yaml).get_matches();
 
     Log::info("Loading config...");
@@ -78,6 +86,7 @@ fn do_the_things() -> Result<Config, Wh2LuaError> {
     Ok(config)
 }
 
+/// Creates the output directory if it doesn ot exists. Returns an error if the output dir is not empty (and the force flag is not set)
 fn prepare_output_dir(config: &Config) -> Result<(), Wh2LuaError> {
     fs::create_dir_all(&config.out_dir)?;
     // Directory is empty if its iterator has no elements
