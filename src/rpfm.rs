@@ -6,10 +6,11 @@ use crate::wh2_lua_error::Wh2LuaError;
 
 use walkdir::WalkDir;
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fs;
 use std::io::{BufReader, Read};
 use std::path::{Path, PathBuf};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use rpfm_error;
 
@@ -17,8 +18,8 @@ use rpfm_lib;
 use rpfm_lib::packedfile::table::db::DB;
 use rpfm_lib::packedfile::table::DecodedData;
 use rpfm_lib::packedfile::PackedFileType;
-use rpfm_lib::packfile::packedfile::RawPackedFile;
-use rpfm_lib::packfile::PackFile;
+use rpfm_lib::packfile::packedfile::{PackedFile, RawPackedFile};
+use rpfm_lib::packfile::{PFHFileType, PFHVersion, PackFile};
 use rpfm_lib::schema;
 use rpfm_lib::schema::Schema;
 
@@ -349,5 +350,31 @@ impl Rpfm {
             DecodedData::SequenceU16(_) => LuaValue::Text("SequenceU16".to_string()),
             DecodedData::SequenceU32(_) => LuaValue::Text("SequenceU32".to_string()),
         }
+    }
+
+    pub fn generate_packfile_with_script(
+        scripts_to_pack: HashMap<Vec<String>, (String, String)>,
+    ) -> Result<PackFile, Wh2LuaError> {
+        let mut packfile = PackFile::new_with_name("lua_db_generated.pack", PFHVersion::PFH5);
+        packfile.set_pfh_file_type(PFHFileType::Movie);
+        for (path, value) in scripts_to_pack.iter() {
+            let mut script_path = vec!["script".to_string()];
+            path.iter().for_each(|e| script_path.push(e.clone()));
+            let timestamp = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("Time went backwards")
+                .as_secs() as i64;
+
+            let raw_packed_file = RawPackedFile::read_from_vec(
+                script_path,
+                "lua_db_generated.pack".to_string(),
+                timestamp,
+                false,
+                value.1.as_bytes().to_vec(),
+            );
+            packfile.add_packed_file(&PackedFile::new_from_raw(&raw_packed_file), true)?;
+        }
+
+        Ok(packfile)
     }
 }

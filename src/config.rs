@@ -20,6 +20,7 @@ pub struct Config {
     pub mod_core_prefix: Option<String>,
     pub base_mod: bool,
     pub force: bool,
+    pub write_files_to_disk: bool,
     pub launch_game: bool,
 }
 
@@ -57,6 +58,7 @@ impl Config {
             mod_core_prefix,
             base_mod,
             force,
+            write_files_to_disk: false,
             launch_game,
         })
     }

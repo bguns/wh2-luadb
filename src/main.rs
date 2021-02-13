@@ -9,8 +9,10 @@ use clap::{load_yaml, App};
 use crossterm::event::read;
 use crossterm::style::Colorize;
 
+use std::collections::HashMap;
 use std::fs;
 use std::io::Write;
+use std::path::PathBuf;
 use std::process::Command;
 
 mod config;
@@ -71,20 +73,67 @@ fn do_the_things() -> Result<Config, Wh2LuaError> {
     let mut packfile_names: Vec<_> = preprocessed_packfiles.keys().cloned().collect();
     packfile_names.reverse();
 
-    for packfile_name in packfile_names {
-        Log::info(&format!("Generating Lua data for {}", packfile_name));
+    if config.write_files_to_disk {
+        for packfile_name in packfile_names {
+            Log::info(&format!("Generating Lua data for {}", packfile_name));
 
-        #[cfg(not(debug_assertions))]
-        Log::set_single_line_log(true);
+            #[cfg(not(debug_assertions))]
+            Log::set_single_line_log(true);
 
-        for table in preprocessed_packfiles.get(&packfile_name).unwrap() {
-            let lua_script = LuaWriter::convert_tw_db_to_lua_script(&config, &table)?;
-            let out_path = table.output_file_path(&config);
-            let mut file = fs::File::open(out_path)?;
-            file.write(lua_script.as_bytes())?;
+            for table in preprocessed_packfiles.get(&packfile_name).unwrap() {
+                let lua_script = LuaWriter::convert_tw_db_to_lua_script(&config, &table)?;
+                let out_path = table.output_file_path(&config);
+                let mut file = fs::File::open(out_path)?;
+                file.write(lua_script.as_bytes())?;
+            }
+
+            Log::set_single_line_log(false);
+        }
+    } else {
+        Log::info("Writing script to packfile...");
+        // target_packfile_path -> (source_packfile_name, lua_script)
+        let mut scripts_to_pack: HashMap<Vec<String>, (String, String)> = HashMap::new();
+
+        for packfile_name in packfile_names {
+            Log::info(&format!("Generating Lua data for {}", packfile_name));
+
+            #[cfg(not(debug_assertions))]
+            Log::set_single_line_log(true);
+
+            for table in preprocessed_packfiles.get(&packfile_name).unwrap() {
+                let lua_script = LuaWriter::convert_tw_db_to_lua_script(&config, &table)?;
+                if let Some(overwritten) = scripts_to_pack.insert(
+                    table.script_file_path.clone(),
+                    (packfile_name.clone(), lua_script),
+                ) {
+                    Log::set_single_line_log(false);
+                    Log::warning(&format!(
+                        "Packfile {} overwrites script {} from packfile {}",
+                        packfile_name,
+                        &table.script_file_path.join("/"),
+                        overwritten.0
+                    ));
+                    #[cfg(not(debug_assertions))]
+                    Log::set_single_line_log(true);
+                }
+            }
+
+            Log::set_single_line_log(false);
         }
 
-        Log::set_single_line_log(false);
+        Log::info("Creating lua_db_generated.pack...");
+
+        let mut packfile = Rpfm::generate_packfile_with_script(scripts_to_pack)?;
+
+        let out_packfile_path: PathBuf = if config.launch_game {
+            ["data", "lua_db_generated.pack"].iter().collect()
+        } else {
+            let mut out_path = config.out_dir.clone();
+            out_path.push("lua_db_generated.pack");
+            out_path
+        };
+
+        packfile.save(Some(out_packfile_path))?;
     }
 
     Ok(config)
