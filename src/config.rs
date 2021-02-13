@@ -45,6 +45,8 @@ impl Config {
 
         let force = matches.is_present("force");
 
+        let write_files_to_disk = matches.is_present("unpacked");
+
         let launch_game = Self::calculate_should_launch_game(matches);
 
         let schema = Rpfm::load_schema()?;
@@ -58,7 +60,7 @@ impl Config {
             mod_core_prefix,
             base_mod,
             force,
-            write_files_to_disk: false,
+            write_files_to_disk,
             launch_game,
         })
     }

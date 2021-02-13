@@ -83,7 +83,15 @@ fn do_the_things() -> Result<Config, Wh2LuaError> {
             for table in preprocessed_packfiles.get(&packfile_name).unwrap() {
                 let lua_script = LuaWriter::convert_tw_db_to_lua_script(&config, &table)?;
                 let out_path = table.output_file_path(&config);
-                let mut file = fs::File::open(out_path)?;
+
+                fs::create_dir_all(&out_path.parent().unwrap())?;
+
+                if out_path.exists() {
+                    Log::add_overwritten_file(format!("{}", out_path.display()));
+                }
+
+                Log::debug(&format!("Writing file: {}", out_path.display()));
+                let mut file = fs::File::create(out_path)?;
                 file.write(lua_script.as_bytes())?;
             }
 
@@ -143,7 +151,8 @@ fn do_the_things() -> Result<Config, Wh2LuaError> {
 fn prepare_output_dir(config: &Config) -> Result<(), Wh2LuaError> {
     fs::create_dir_all(&config.out_dir)?;
     // Directory is empty if its iterator has no elements
-    if !&config.force && !&config.out_dir.read_dir()?.next().is_none() {
+    if config.write_files_to_disk && !config.force && !&config.out_dir.read_dir()?.next().is_none()
+    {
         return Err(Wh2LuaError::OutDirNotEmpty(config.out_dir.clone()));
     }
     Ok(())

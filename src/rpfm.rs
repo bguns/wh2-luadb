@@ -135,17 +135,6 @@ impl Rpfm {
                     Some(packfile_path),
                 )?;
 
-                let mut output_file_path = config.out_dir.clone();
-                script_file_path
-                    .iter()
-                    .for_each(|e| output_file_path.push(e));
-
-                fs::create_dir_all(&output_file_path.parent().unwrap())?;
-
-                if output_file_path.exists() {
-                    Log::add_overwritten_file(format!("{}", output_file_path.display()));
-                }
-
                 pf_processed_result.push(Self::convert_rpfm_db_to_preprocessed_db(
                     &db,
                     db.get_ref_table_name(),
@@ -219,18 +208,6 @@ impl Rpfm {
 
                 let script_file_path =
                     Self::create_script_file_path(config, db_table, db_file_name, None)?;
-
-                let mut output_file_path = config.out_dir.clone();
-
-                script_file_path
-                    .iter()
-                    .for_each(|e| output_file_path.push(e));
-
-                fs::create_dir_all(&output_file_path.parent().unwrap())?;
-
-                if output_file_path.exists() {
-                    Log::add_overwritten_file(format!("{}", output_file_path.display()));
-                }
 
                 Log::rpfm(&format!("Loading file: {}", relative_path.display()));
 

@@ -1,6 +1,5 @@
 name: wh2-luadb
 version: "1.0"
-author: Bert Guns <bertguns@pm.me>
 about: Converts Total War Warhammer 2 DB to Lua representations, using RPFM for intermediary steps (extracting etc.)
 args:
     - packfile: 
@@ -40,3 +39,7 @@ args:
     - force:
         long: force
         about: Normally, in order to ensure clean and correct output, this tool expects the output directory to be empty, and will not continue if this is not so. Setting the --force flag ignores this check, which will simply add resulting files in the proper directories, overwriting them if necessary. Only use this if you know what you're doing.
+    - unpacked:
+        short: u
+        long: unpacked
+        about: By default, the resulting script files will be placed in a (movie) .pack file in the output directory. Use this flag to have output the script files directly to the output directory instead.
