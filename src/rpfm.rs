@@ -67,12 +67,12 @@ impl Rpfm {
         Ok(result)
     }
 
-    fn create_output_file_path(
+    fn create_script_file_path(
         config: &Config,
         db_table: &str,
         db_file_name: &str,
         packfile_path: Option<&PathBuf>,
-    ) -> Result<PathBuf, Wh2LuaError> {
+    ) -> Result<Vec<String>, Wh2LuaError> {
         let mut file_name_without_extension = db_file_name.to_string();
         let mut table_folder = "mod".to_string();
 
@@ -96,12 +96,11 @@ impl Rpfm {
             }
         }
 
-        let mut output_file_path = config.out_dir.clone();
-        output_file_path.push("lua_db");
+        let mut output_file_path = Vec::new();
+        output_file_path.push("lua_db".to_string());
         output_file_path.push(table_folder);
-        output_file_path.push(db_table);
-        output_file_path.push(file_name_without_extension);
-        output_file_path = output_file_path.with_extension("lua");
+        output_file_path.push(db_table.to_string());
+        output_file_path.push(format!("{}.lua", file_name_without_extension));
 
         Ok(output_file_path)
     }
@@ -128,12 +127,17 @@ impl Rpfm {
                 let pf_file_name = pf.get_path().last().unwrap().clone();
                 let db = Self::decode_db_packed_file(pf.get_ref_mut_raw(), &config.schema)?;
 
-                let output_file_path = Self::create_output_file_path(
+                let script_file_path = Self::create_script_file_path(
                     config,
                     db.get_ref_table_name(),
                     &pf_file_name,
                     Some(packfile_path),
                 )?;
+
+                let mut output_file_path = config.out_dir.clone();
+                script_file_path
+                    .iter()
+                    .for_each(|e| output_file_path.push(e));
 
                 fs::create_dir_all(&output_file_path.parent().unwrap())?;
 
@@ -143,7 +147,8 @@ impl Rpfm {
 
                 pf_processed_result.push(Self::convert_rpfm_db_to_preprocessed_db(
                     &db,
-                    &output_file_path,
+                    db.get_ref_table_name(),
+                    script_file_path,
                 )?);
             }
 
@@ -211,8 +216,14 @@ impl Rpfm {
 
                 let db_file_name = entry.path().file_stem().unwrap().to_str().unwrap();
 
-                let output_file_path =
-                    Self::create_output_file_path(config, db_table, db_file_name, None)?;
+                let script_file_path =
+                    Self::create_script_file_path(config, db_table, db_file_name, None)?;
+
+                let mut output_file_path = config.out_dir.clone();
+
+                script_file_path
+                    .iter()
+                    .for_each(|e| output_file_path.push(e));
 
                 fs::create_dir_all(&output_file_path.parent().unwrap())?;
 
@@ -227,7 +238,7 @@ impl Rpfm {
                 dir_result.push(Self::pre_process_db_file(
                     &config,
                     &entry.path(),
-                    &output_file_path,
+                    script_file_path,
                 )?);
             }
         }
@@ -244,12 +255,12 @@ impl Rpfm {
     pub fn pre_process_db_file(
         config: &Config,
         rpfm_db_file: &Path,
-        output_file_path: &Path,
+        script_file_path: Vec<String>,
     ) -> Result<TotalWarDbPreProcessed, Wh2LuaError> {
         Log::debug(&format!(
             "Pre-processing db file {} to output {}",
             rpfm_db_file.display(),
-            output_file_path.display()
+            script_file_path.join("/")
         ));
         let mut data = vec![];
 
@@ -264,13 +275,15 @@ impl Rpfm {
 
         Ok(Self::convert_rpfm_db_to_preprocessed_db(
             &db,
-            &output_file_path,
+            db.get_ref_table_name(),
+            script_file_path,
         )?)
     }
 
     fn convert_rpfm_db_to_preprocessed_db(
         rpfm_db: &DB,
-        output_file_path: &Path,
+        table_name: &str,
+        script_file_path: Vec<String>,
     ) -> Result<TotalWarDbPreProcessed, Wh2LuaError> {
         let rpfm_fields = rpfm_db.get_ref_definition().get_fields_processed();
         let rpfm_data = rpfm_db.get_ref_table_data();
@@ -315,12 +328,10 @@ impl Rpfm {
             TableData::FlatArray(processed_data)
         };
 
-        let table_name = util::get_parent_folder_name(output_file_path)?;
-
         Ok(TotalWarDbPreProcessed::new(
             table_name,
             data,
-            &output_file_path,
+            script_file_path,
         ))
     }
 

@@ -18,7 +18,7 @@ impl LuaWriter {
         Log::debug(&format!(
             "Writing db {} to lua file {}",
             &table_data.table_name,
-            &table_data.output_file_path.display()
+            &table_data.output_file_path(config).display()
         ));
 
         let mut result = String::new();
@@ -37,7 +37,7 @@ impl LuaWriter {
 
         Log::info(&format!(
             "Creating script: {}",
-            &util::strip_db_prefix_from_path(&table_data.output_file_path).display()
+            &util::strip_db_prefix_from_path(&table_data.output_file_path(config)).display()
         ));
 
         match &table_data.data {
@@ -65,7 +65,7 @@ impl LuaWriter {
 
         result.push_str("\nreturn result");
 
-        let mut out_file = fs::File::create(&table_data.output_file_path)?;
+        let mut out_file = fs::File::create(&table_data.output_file_path(config))?;
         out_file.write_all(result.as_bytes())?;
 
         Ok(())

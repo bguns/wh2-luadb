@@ -1,5 +1,7 @@
 use std::collections::BTreeMap;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
+
+use crate::config::Config;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum LuaValue {
@@ -25,21 +27,29 @@ pub enum TableData {
 
 pub struct TotalWarDbPreProcessed {
     pub table_name: String,
-    pub output_file_path: PathBuf,
+    pub script_file_path: Vec<String>,
     pub data: TableData,
     pub indexed_fields: Vec<LuaValue>,
     pub built_indexes: Vec<TableIndex>,
 }
 
 impl TotalWarDbPreProcessed {
-    pub fn new(table_name: &str, data: TableData, output_file_path: &Path) -> Self {
+    pub fn new(table_name: &str, data: TableData, script_file_path: Vec<String>) -> Self {
         Self {
             table_name: table_name.to_string(),
-            output_file_path: PathBuf::from(output_file_path),
+            script_file_path,
             data,
             indexed_fields: Vec::new(),
             built_indexes: Vec::new(),
         }
+    }
+
+    pub fn output_file_path(&self, config: &Config) -> PathBuf {
+        let mut output_file_path = config.out_dir.clone();
+        self.script_file_path
+            .iter()
+            .for_each(|e| output_file_path.push(e));
+        output_file_path
     }
 }
 
