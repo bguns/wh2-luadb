@@ -5,16 +5,14 @@ use crate::util;
 use crate::wh2_lua_error::Wh2LuaError;
 
 use std::collections::BTreeMap;
-use std::fs;
-use std::io::Write;
 
 pub struct LuaWriter {}
 
 impl LuaWriter {
-    pub fn write_tw_db_to_lua_file(
+    pub fn convert_tw_db_to_lua_script(
         config: &Config,
         table_data: &TotalWarDbPreProcessed,
-    ) -> Result<(), Wh2LuaError> {
+    ) -> Result<String, Wh2LuaError> {
         Log::debug(&format!(
             "Writing db {} to lua file {}",
             &table_data.table_name,
@@ -65,10 +63,7 @@ impl LuaWriter {
 
         result.push_str("\nreturn result");
 
-        let mut out_file = fs::File::create(&table_data.output_file_path(config))?;
-        out_file.write_all(result.as_bytes())?;
-
-        Ok(())
+        Ok(result)
     }
 
     fn lua_key_value_table(

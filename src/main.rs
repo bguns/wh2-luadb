@@ -10,6 +10,7 @@ use crossterm::event::read;
 use crossterm::style::Colorize;
 
 use std::fs;
+use std::io::Write;
 use std::process::Command;
 
 mod config;
@@ -77,7 +78,10 @@ fn do_the_things() -> Result<Config, Wh2LuaError> {
         Log::set_single_line_log(true);
 
         for table in preprocessed_packfiles.get(&packfile_name).unwrap() {
-            LuaWriter::write_tw_db_to_lua_file(&config, &table)?;
+            let lua_script = LuaWriter::convert_tw_db_to_lua_script(&config, &table)?;
+            let out_path = table.output_file_path(&config);
+            let mut file = fs::File::open(out_path)?;
+            file.write(lua_script.as_bytes())?;
         }
 
         Log::set_single_line_log(false);
