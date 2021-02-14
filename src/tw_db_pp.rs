@@ -29,8 +29,6 @@ pub struct TotalWarDbPreProcessed {
     pub table_name: String,
     pub script_file_path: Vec<String>,
     pub data: TableData,
-    pub indexed_fields: Vec<LuaValue>,
-    pub built_indexes: Vec<TableIndex>,
 }
 
 impl TotalWarDbPreProcessed {
@@ -39,8 +37,6 @@ impl TotalWarDbPreProcessed {
             table_name: table_name.to_string(),
             script_file_path,
             data,
-            indexed_fields: Vec::new(),
-            built_indexes: Vec::new(),
         }
     }
 
@@ -51,9 +47,4 @@ impl TotalWarDbPreProcessed {
             .for_each(|e| output_file_path.push(e));
         output_file_path
     }
-}
-
-pub struct TableIndex {
-    pub field: LuaValue,
-    pub data: BTreeMap<LuaValue, Vec<LuaValue>>,
 }
