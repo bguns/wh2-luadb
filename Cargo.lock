@@ -1805,7 +1805,8 @@ dependencies = [
 
 [[package]]
 name = "rpfm_error"
-version = "2.3.101"
+version = "2.3.102"
+source = "git+https://github.com/Frodo45127/rpfm?branch=develop#95cd9e71696598f37eccc8828a54686042acb4fb"
 dependencies = [
  "backtrace",
  "bincode",
@@ -1829,7 +1830,8 @@ dependencies = [
 
 [[package]]
 name = "rpfm_lib"
-version = "2.3.101"
+version = "2.3.102"
+source = "git+https://github.com/Frodo45127/rpfm?branch=develop#95cd9e71696598f37eccc8828a54686042acb4fb"
 dependencies = [
  "bincode",
  "bitflags",
@@ -1865,7 +1867,8 @@ dependencies = [
 
 [[package]]
 name = "rpfm_macros"
-version = "2.3.101"
+version = "2.3.102"
+source = "git+https://github.com/Frodo45127/rpfm?branch=develop#95cd9e71696598f37eccc8828a54686042acb4fb"
 dependencies = [
  "proc-macro2",
  "quote",
