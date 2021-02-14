@@ -68,6 +68,110 @@ impl Rpfm {
         Ok(result)
     }
 
+    fn process_packfiles(
+        config: &Config,
+        packfiles: &[PathBuf],
+    ) -> Result<BTreeMap<String, Vec<TotalWarDbPreProcessed>>, Wh2LuaError> {
+        Log::debug("Processing packfiles...");
+        let mut result: BTreeMap<String, Vec<TotalWarDbPreProcessed>> = BTreeMap::new();
+
+        for packfile_path in packfiles {
+            Log::info(&format!(
+                "Processing packfile: {}",
+                packfile_path
+                    .file_name()
+                    .unwrap()
+                    .to_string_lossy()
+                    .to_string()
+            ));
+            let packfile = PackFile::open_packfiles(&[packfile_path.clone()], true, false, false)?;
+
+            let mut pf_processed_result: Vec<TotalWarDbPreProcessed> = Vec::new();
+
+            let mut packed_db_files = packfile.get_packed_files_by_type(PackedFileType::DB, true);
+
+            if packed_db_files.len() == 0 {
+                Log::info("No db files found");
+            } else {
+                #[cfg(not(debug_assertions))]
+                Log::set_single_line_log(true);
+
+                for pf in packed_db_files.iter_mut() {
+                    Log::rpfm(&format!(
+                        "Processing db files for {} - {}",
+                        packfile_path
+                            .file_name()
+                            .unwrap()
+                            .to_string_lossy()
+                            .to_string(),
+                        pf.get_path().join("/")
+                    ));
+                    let pf_file_name = pf.get_path().last().unwrap().clone();
+                    let db = Self::decode_db_packed_file(pf.get_ref_mut_raw(), &config.schema)?;
+
+                    let script_file_path = Self::create_script_file_path(
+                        config,
+                        db.get_ref_table_name(),
+                        &pf_file_name,
+                        Some(packfile_path),
+                    )?;
+
+                    pf_processed_result.push(Self::convert_rpfm_db_to_preprocessed_db(
+                        &db,
+                        db.get_ref_table_name(),
+                        script_file_path,
+                    )?);
+                }
+
+                result.insert(
+                    packfile_path
+                        .file_stem()
+                        .unwrap()
+                        .to_str()
+                        .unwrap()
+                        .to_string(),
+                    pf_processed_result,
+                );
+
+                Log::rpfm(&format!(
+                    "Processing db files for {} - DONE",
+                    packfile_path
+                        .file_name()
+                        .unwrap()
+                        .to_string_lossy()
+                        .to_string()
+                ));
+
+                Log::set_single_line_log(false);
+            }
+        }
+
+        Ok(result)
+    }
+
+    fn decode_db_packed_file(
+        raw_packed_file: &mut RawPackedFile,
+        schema: &Schema,
+    ) -> Result<DB, Wh2LuaError> {
+        match PackedFileType::get_packed_file_type(raw_packed_file.get_path()) {
+            PackedFileType::DB => {
+                let data = raw_packed_file.get_data_and_keep_it()?;
+                let name = raw_packed_file.get_path().get(1).ok_or_else(|| {
+                    Wh2LuaError::RpfmError(rpfm_error::Error::from(
+                        rpfm_error::ErrorKind::DBTableIsNotADBTable,
+                    ))
+                })?;
+                let packed_file = DB::read(&data, &name, &schema, false)?;
+                Ok(packed_file)
+            }
+            _ => {
+                return Err(Wh2LuaError::RpfmError(rpfm_error::Error::from(
+                    rpfm_error::ErrorKind::DBTableIsNotADBTable,
+                )))
+            }
+        }
+    }
+
     fn create_script_file_path(
         config: &Config,
         db_table: &str,
@@ -106,91 +210,23 @@ impl Rpfm {
         Ok(output_file_path)
     }
 
-    fn process_packfiles(
-        config: &Config,
-        packfiles: &[PathBuf],
-    ) -> Result<BTreeMap<String, Vec<TotalWarDbPreProcessed>>, Wh2LuaError> {
-        let mut result: BTreeMap<String, Vec<TotalWarDbPreProcessed>> = BTreeMap::new();
-
-        for packfile_path in packfiles {
-            Log::info(&format!("Processing packfile: {}", packfile_path.display()));
-            let packfile = PackFile::open_packfiles(&[packfile_path.clone()], true, false, false)?;
-
-            let mut pf_processed_result: Vec<TotalWarDbPreProcessed> = Vec::new();
-
-            let mut packed_db_files = packfile.get_packed_files_by_type(PackedFileType::DB, true);
-
-            #[cfg(not(debug_assertions))]
-            Log::set_single_line_log(true);
-
-            for pf in packed_db_files.iter_mut() {
-                Log::rpfm(&format!("Processing db file: {}", pf.get_path().join("/")));
-                let pf_file_name = pf.get_path().last().unwrap().clone();
-                let db = Self::decode_db_packed_file(pf.get_ref_mut_raw(), &config.schema)?;
-
-                let script_file_path = Self::create_script_file_path(
-                    config,
-                    db.get_ref_table_name(),
-                    &pf_file_name,
-                    Some(packfile_path),
-                )?;
-
-                pf_processed_result.push(Self::convert_rpfm_db_to_preprocessed_db(
-                    &db,
-                    db.get_ref_table_name(),
-                    script_file_path,
-                )?);
-            }
-
-            result.insert(
-                packfile_path
-                    .file_stem()
-                    .unwrap()
-                    .to_str()
-                    .unwrap()
-                    .to_string(),
-                pf_processed_result,
-            );
-
-            Log::set_single_line_log(false);
-        }
-
-        Ok(result)
-    }
-
-    fn decode_db_packed_file(
-        raw_packed_file: &mut RawPackedFile,
-        schema: &Schema,
-    ) -> Result<DB, Wh2LuaError> {
-        match PackedFileType::get_packed_file_type(raw_packed_file.get_path()) {
-            PackedFileType::DB => {
-                let data = raw_packed_file.get_data_and_keep_it()?;
-                let name = raw_packed_file.get_path().get(1).ok_or_else(|| {
-                    Wh2LuaError::RpfmError(rpfm_error::Error::from(
-                        rpfm_error::ErrorKind::DBTableIsNotADBTable,
-                    ))
-                })?;
-                let packed_file = DB::read(&data, &name, &schema, false)?;
-                Ok(packed_file)
-            }
-            _ => {
-                return Err(Wh2LuaError::RpfmError(rpfm_error::Error::from(
-                    rpfm_error::ErrorKind::DBTableIsNotADBTable,
-                )))
-            }
-        }
-    }
-
     fn process_in_dir(
         config: &Config,
         in_dir: &PathBuf,
     ) -> Result<BTreeMap<String, Vec<TotalWarDbPreProcessed>>, Wh2LuaError> {
+        Log::debug(&format!(
+            "Processing extracted db files in input directory: {}",
+            in_dir.display()
+        ));
         if !in_dir.exists() {
             return Err(Wh2LuaError::ConfigError(format!(
                 "Input directory not found at specified path: {}",
                 in_dir.display()
             )));
         }
+
+        let in_dir_name = in_dir.file_name().unwrap().to_string_lossy().to_string();
+
         let rpfm_in_dir: PathBuf = [in_dir.as_path(), Path::new("db")].iter().collect();
 
         let mut dir_result: Vec<TotalWarDbPreProcessed> = Vec::new();
@@ -209,9 +245,7 @@ impl Rpfm {
                 let script_file_path =
                     Self::create_script_file_path(config, db_table, db_file_name, None)?;
 
-                Log::rpfm(&format!("Loading file: {}", relative_path.display()));
-
-                Log::debug(&format!("Input file: {}", entry.path().display()));
+                Log::rpfm(&format!("Processing file: {}", relative_path.display()));
 
                 dir_result.push(Self::pre_process_db_file(
                     &config,
@@ -221,11 +255,13 @@ impl Rpfm {
             }
         }
 
+        Log::rpfm("Processing files - DONE");
+
         Log::set_single_line_log(false);
 
         let mut result: BTreeMap<String, Vec<TotalWarDbPreProcessed>> = BTreeMap::new();
 
-        result.insert("directory".to_string(), dir_result);
+        result.insert(in_dir_name, dir_result);
 
         Ok(result)
     }
@@ -263,6 +299,10 @@ impl Rpfm {
         table_name: &str,
         script_file_path: Vec<String>,
     ) -> Result<TotalWarDbPreProcessed, Wh2LuaError> {
+        Log::debug(&format!(
+            "Converting {} to pre-processed table...",
+            table_name
+        ));
         let rpfm_fields = rpfm_db.get_ref_definition().get_fields_processed();
         let rpfm_data = rpfm_db.get_ref_table_data();
         let is_single_key = rpfm_fields

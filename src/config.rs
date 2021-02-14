@@ -26,6 +26,8 @@ pub struct Config {
 
 impl Config {
     pub fn from_matches(matches: &ArgMatches) -> Result<Config, Wh2LuaError> {
+        Log::info("Parsing config...");
+
         let packfile_paths = Self::try_load_packfile_paths(matches)?;
 
         // Packfiles get priority. Only look at in_dir if we're not working with packfile(s)
@@ -51,6 +53,8 @@ impl Config {
 
         let schema = Rpfm::load_schema()?;
 
+        Log::info("Config OK");
+
         Ok(Config {
             schema,
             packfiles: packfile_paths,
@@ -66,11 +70,11 @@ impl Config {
     }
 
     fn try_load_packfile_paths(matches: &ArgMatches) -> Result<Option<Vec<PathBuf>>, Wh2LuaError> {
+        Log::debug("Trying to load packfile paths...");
         let packfile_path_arg = matches.value_of("packfile");
         let in_dir_path_arg = matches.value_of("input-directory");
 
         let packfile_paths = if packfile_path_arg.is_none() && in_dir_path_arg.is_none() {
-            Log::info("No packfile and no in dir specified, looking for KMM last used profile...");
             Self::try_load_packfile_names_from_kmm_last_used_profile()?
         } else if let Some(packfile) = packfile_path_arg {
             Self::try_parse_single_packfile_path_from_arg(packfile)?.map(|packfile| vec![packfile])
@@ -83,6 +87,7 @@ impl Config {
 
     fn try_load_packfile_names_from_kmm_last_used_profile(
     ) -> Result<Option<Vec<PathBuf>>, Wh2LuaError> {
+        Log::debug("Looking for packfile paths in KMM last used mods profile...");
         let mut packfiles: Vec<PathBuf> = Vec::new();
 
         let kmm_last_used_file: PathBuf = match ProjectDirs::from("", "", "Kaedrin Mod Manager") {
@@ -132,6 +137,7 @@ impl Config {
     fn try_parse_single_packfile_path_from_arg(
         packfile_path_str: &str,
     ) -> Result<Option<PathBuf>, Wh2LuaError> {
+        Log::debug("Parsing packfile from arguments...");
         let packfile_path = PathBuf::from(packfile_path_str);
         if !packfile_path.exists() {
             return Err(Wh2LuaError::ConfigError(format!(
@@ -143,6 +149,7 @@ impl Config {
     }
 
     fn try_parse_in_dir_arg(matches: &ArgMatches) -> Result<Option<PathBuf>, Wh2LuaError> {
+        Log::debug("Trying to parse input directory from arguments...");
         if let Some(directory) = matches.value_of("input-directory") {
             let in_dir_path = PathBuf::from(directory);
             if !in_dir_path.exists() {
@@ -162,6 +169,7 @@ impl Config {
         packfile_paths: &Option<Vec<PathBuf>>,
         in_dir_path: &Option<PathBuf>,
     ) -> Result<PathBuf, Wh2LuaError> {
+        Log::debug("Calculating output directory...");
         if let Some(output_dir) = matches.value_of("output-directory") {
             Ok(PathBuf::from(output_dir))
         } else {
@@ -172,11 +180,11 @@ impl Config {
             } else {
                 // If an input directory is specified without output directory, use the input diretory as output directory
                 if let Some(ref in_dir) = in_dir_path {
-                    Log::info(&format!("Outpt directory not specified in config/arguments, using same as input directory): {}", in_dir.to_str().unwrap()));
+                    Log::debug(&format!("Outpt directory not specified in config/arguments, using same as input directory): {}", in_dir.to_str().unwrap()));
                     Ok(in_dir.clone())
                 } else {
                     // Fallback: use ./lua_db_export directory
-                    Log::info(&format!(
+                    Log::debug(&format!(
                         "Output directory not specified, using .\\lua_db_export"
                     ));
                     let mut path = std::env::current_dir()?;
@@ -194,7 +202,7 @@ impl Config {
         let packfile_name = packfile_path.file_stem().unwrap();
         let mut dir = PathBuf::from(packfile_dir);
         dir.push(&format!("{0}_lua_ext", packfile_name.to_str().unwrap()));
-        Log::info(&format!(
+        Log::debug(&format!(
             "Output directory (derived from packfile name): {}",
             dir.to_str().unwrap()
         ));

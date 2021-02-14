@@ -7,7 +7,6 @@ use crate::wh2_lua_error::Wh2LuaError;
 use clap::{load_yaml, App};
 
 use crossterm::event::read;
-use crossterm::style::Colorize;
 
 use std::collections::HashMap;
 use std::fs;
@@ -61,26 +60,28 @@ fn do_the_things() -> Result<Config, Wh2LuaError> {
 
     let matches = App::from(yaml).get_matches();
 
-    Log::info("Loading config...");
     let config = Config::from_matches(&matches)?;
     prepare_output_dir(&config)?;
-    Log::info(&format!("Config {}", "OK".green()));
 
-    Log::info("Loading files with RPFM...");
     let preprocessed_packfiles = Rpfm::load(&config)?;
 
-    Log::info("Writing data to Lua scripts...");
     let mut packfile_names: Vec<_> = preprocessed_packfiles.keys().cloned().collect();
     packfile_names.reverse();
 
     if config.write_files_to_disk {
         for packfile_name in packfile_names {
-            Log::info(&format!("Generating Lua data for {}", packfile_name));
-
             #[cfg(not(debug_assertions))]
             Log::set_single_line_log(true);
 
             for table in preprocessed_packfiles.get(&packfile_name).unwrap() {
+                let file_name = table.script_file_path.last().unwrap().clone();
+                Log::info(&format!(
+                    "Generating Lua script for {} - {}/{}",
+                    packfile_name,
+                    &table.table_name,
+                    // Drop .lua suffix
+                    &file_name[..file_name.len() - 4]
+                ));
                 let lua_script = LuaWriter::convert_tw_db_to_lua_script(&config, &table)?;
                 let out_path = table.output_file_path(&config);
 
@@ -95,20 +96,29 @@ fn do_the_things() -> Result<Config, Wh2LuaError> {
                 file.write(lua_script.as_bytes())?;
             }
 
+            Log::info(&format!(
+                "Generating Lua script for {} - DONE",
+                packfile_name
+            ));
             Log::set_single_line_log(false);
         }
     } else {
-        Log::info("Writing script to packfile...");
         // target_packfile_path -> (source_packfile_name, lua_script)
         let mut scripts_to_pack: HashMap<Vec<String>, (String, String)> = HashMap::new();
 
         for packfile_name in packfile_names {
-            Log::info(&format!("Generating Lua data for {}", packfile_name));
-
             #[cfg(not(debug_assertions))]
             Log::set_single_line_log(true);
 
             for table in preprocessed_packfiles.get(&packfile_name).unwrap() {
+                let file_name = table.script_file_path.last().unwrap().clone();
+                Log::info(&format!(
+                    "Generating Lua script for {} - {}/{}",
+                    packfile_name,
+                    &table.table_name,
+                    // Drop .lua suffix
+                    &file_name[..file_name.len() - 4]
+                ));
                 let lua_script = LuaWriter::convert_tw_db_to_lua_script(&config, &table)?;
                 if let Some(overwritten) = scripts_to_pack.insert(
                     table.script_file_path.clone(),
@@ -126,10 +136,12 @@ fn do_the_things() -> Result<Config, Wh2LuaError> {
                 }
             }
 
+            Log::info(&format!(
+                "Generating Lua script for {} - DONE",
+                packfile_name
+            ));
             Log::set_single_line_log(false);
         }
-
-        Log::info("Creating lua_db_generated.pack...");
 
         let mut packfile = Rpfm::generate_packfile_with_script(scripts_to_pack)?;
 

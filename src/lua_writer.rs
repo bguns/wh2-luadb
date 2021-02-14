@@ -1,7 +1,5 @@
 use crate::config::Config;
-use crate::log::Log;
 use crate::tw_db_pp::{LuaValue, TableData, TotalWarDbPreProcessed};
-use crate::util;
 use crate::wh2_lua_error::Wh2LuaError;
 
 use std::collections::BTreeMap;
@@ -13,12 +11,6 @@ impl LuaWriter {
         config: &Config,
         table_data: &TotalWarDbPreProcessed,
     ) -> Result<String, Wh2LuaError> {
-        Log::debug(&format!(
-            "Writing db {} to lua file {}",
-            &table_data.table_name,
-            &table_data.output_file_path(config).display()
-        ));
-
         let mut result = String::new();
         let mut indent: usize = 0;
 
@@ -32,11 +24,6 @@ impl LuaWriter {
         }
 
         indent += 1;
-
-        Log::info(&format!(
-            "Creating script: {}",
-            &util::strip_db_prefix_from_path(&table_data.output_file_path(config)).display()
-        ));
 
         match &table_data.data {
             TableData::KeyValue(kv_table_data) => {
