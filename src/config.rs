@@ -215,6 +215,7 @@ impl Config {
 
         packfile_path_arg.is_none()
             && in_dir_path_arg.is_none()
-            && Path::new("./Warhammer2_real.exe").exists()
+            && (Path::new("./Warhammer2.exe").exists()
+                || Path::new("./Warhammer2_real.exe").exists())
     }
 }

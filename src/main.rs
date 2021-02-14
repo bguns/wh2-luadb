@@ -11,7 +11,7 @@ use crossterm::event::read;
 use std::collections::HashMap;
 use std::fs;
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 mod config;
@@ -46,7 +46,11 @@ fn main() {
 
             Log::debug(&format!("Config: launch_game = {}", config.launch_game));
             if config.launch_game {
-                Command::new("./Warhammer2_real.exe").output().unwrap();
+                if Path::new("./Warhammer2.exe").exists() {
+                    Command::new("./Warhammer2.exe").output().unwrap();
+                } else {
+                    Command::new("./Warhammer2_real.exe").output().unwrap();
+                }
             }
         }
     }
