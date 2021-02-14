@@ -7,4 +7,6 @@ edition = "2018"
 
 [dependencies]
 winreg = "0.8"
+winapi = "0.3"
 crossterm = "0.19.0"
+lazy_static = "1.4.0"

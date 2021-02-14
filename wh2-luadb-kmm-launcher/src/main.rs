@@ -4,32 +4,58 @@ use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
 use std::process::Command;
 
+use std::sync::{Arc, RwLock};
+
 use winreg::enums::*;
 use winreg::RegKey;
 
+use winapi::shared::minwindef::{BOOL, DWORD, FALSE, TRUE};
+use winapi::um::consoleapi::SetConsoleCtrlHandler;
+use winapi::um::wincon::{
+    CTRL_BREAK_EVENT, CTRL_CLOSE_EVENT, CTRL_C_EVENT, CTRL_LOGOFF_EVENT, CTRL_SHUTDOWN_EVENT,
+};
+
+use lazy_static::lazy_static;
+
 use crossterm::event::read;
 
+lazy_static! {
+    static ref WH2_DIR: Arc<RwLock<PathBuf>> = Arc::new(RwLock::new(
+        find_wh2_install_dir().expect("Unexpected error when trying to find WH2 DIR")
+    ));
+    static ref WH2_EXE: Arc<PathBuf> = {
+        let mut wh2_exe = WH2_DIR.read().unwrap().clone();
+        wh2_exe.push("Warhammer2.exe");
+        Arc::new(wh2_exe)
+    };
+    static ref WH2_REAL_EXE: Arc<PathBuf> = {
+        let mut wh2_real_exe = WH2_DIR.read().unwrap().clone();
+        wh2_real_exe.push("Warhammer2_real.exe");
+        Arc::new(wh2_real_exe)
+    };
+    static ref WH2_LUADB_EXE: Arc<PathBuf> = {
+        let mut wh2_luadb_exe = WH2_DIR.read().unwrap().clone();
+        wh2_luadb_exe.push("wh2-luadb.exe");
+        Arc::new(wh2_luadb_exe)
+    };
+    static ref STEP_REACHED: Arc<RwLock<i32>> = Arc::new(RwLock::new(0));
+}
+
 fn main() -> Result<(), Wh2LuaDBKMMLauncherError> {
-    let mut step = 0;
-    let wh2_install_dir = find_wh2_install_dir()?;
-    let result = do_the_things(&mut step, &wh2_install_dir);
+    if 0 == unsafe { SetConsoleCtrlHandler(Some(ctrl_handler), TRUE) } {
+        println!("Could not install control handler");
+        eprintln!("Press any key to quit");
+        match read().unwrap() {
+            _ => {}
+        }
+        return Ok(());
+    }
+
+    let result = do_the_things();
     match result {
         Err(ref error) => {
             eprintln!("{}", error);
-            let mut wh2_exe = wh2_install_dir.clone();
-            wh2_exe.push("Warhammer2.exe");
-            let mut wh2_real_exe = wh2_install_dir.clone();
-            wh2_real_exe.push("Warhammer2_real.exe");
-            let mut wh2_luadb_exe = wh2_install_dir.clone();
-            wh2_luadb_exe.push("wh2-luadb.exe");
-            if step == 1 {
-                fs::rename(&wh2_real_exe, &wh2_exe)?;
-            } else if step == 2 || step == 3 {
-                fs::rename(&wh2_exe, &wh2_luadb_exe)?;
-                fs::rename(&wh2_real_exe, &wh2_exe)?;
-            } else if step == 4 {
-                fs::rename(&wh2_real_exe, &wh2_exe)?;
-            }
+            handle_interrupted();
             eprintln!("Press any key to quit");
             match read().unwrap() {
                 _ => {}
@@ -40,17 +66,31 @@ fn main() -> Result<(), Wh2LuaDBKMMLauncherError> {
     }
 }
 
-fn do_the_things(
-    step: &mut i32,
-    wh2_install_dir: &PathBuf,
-) -> Result<(), Wh2LuaDBKMMLauncherError> {
-    println!("WH2 install dir found at {}", wh2_install_dir.display());
-    let mut wh2_exe = wh2_install_dir.clone();
-    wh2_exe.push("Warhammer2.exe");
-    let mut wh2_real_exe = wh2_install_dir.clone();
-    wh2_real_exe.push("Warhammer2_real.exe");
-    let mut wh2_luadb_exe = wh2_install_dir.clone();
-    wh2_luadb_exe.push("wh2-luadb.exe");
+fn handle_interrupted() {
+    let step = *STEP_REACHED.read().unwrap();
+    if step == 1 {
+        println!("Restoring Warhammer2.exe from Warhammer2.exe");
+        fs::rename(&**WH2_REAL_EXE, &**WH2_EXE)
+            .expect("Critical error when restoring files following interruption");
+    } else if step == 2 || step == 3 {
+        println!("Restoring wh2-luadb.exe from Warhammer2.exe");
+        fs::rename(&**WH2_EXE, &**WH2_LUADB_EXE)
+            .expect("Critical error when restoring files following interruption");
+        println!("Restoring Warhammer2.exe from Warhammer2.exe");
+        fs::rename(&**WH2_REAL_EXE, &**WH2_EXE)
+            .expect("Critical error when restoring files following interruption");
+    } else if step == 4 {
+        println!("Restoring Warhammer2.exe from Warhammer2.exe");
+        fs::rename(&**WH2_REAL_EXE, &**WH2_EXE)
+            .expect("Critical error when restoring files following interruption");
+    }
+}
+
+fn do_the_things() -> Result<(), Wh2LuaDBKMMLauncherError> {
+    println!(
+        "Warhammer 2 install directory found at {}",
+        WH2_DIR.read().unwrap().display()
+    );
 
     let wh2_luadb_local_exe = PathBuf::from("./wh2-luadb.exe");
     if !wh2_luadb_local_exe.exists() {
@@ -62,19 +102,29 @@ fn do_the_things(
         return Err(Wh2LuaDBKMMLauncherError::Error("Could not find Warhammer2MM.exe in this directory. Please make sure you run this executable in the same directory as Warhammer2MM.exe and wh2-luadb.exe.".to_string()));
     }
 
-    fs::copy(&wh2_luadb_local_exe, &wh2_luadb_exe)?;
+    println!("Copying wh2-luadb.exe to Warhammer 2 install directory...");
+    fs::copy(&wh2_luadb_local_exe, &**WH2_LUADB_EXE)?;
 
-    fs::rename(&wh2_exe, &wh2_real_exe)?;
-    *step += 1;
-    fs::rename(&wh2_luadb_exe, &wh2_exe)?;
-    *step += 1;
-    println!("Starting KMM. DO NOT CLOSE THIS WINDOW.");
+    println!("Renaming Warhammer2.exe to Warhammer2_real.exe (will be restored when KMM closes)");
+    fs::rename(&**WH2_EXE, &**WH2_REAL_EXE)?;
+    *STEP_REACHED.write().unwrap() += 1;
+
+    println!("Renaming wh2-luadb.exe to Warhammer2.exe (will be restored when KMM closes)");
+    fs::rename(&**WH2_LUADB_EXE, &**WH2_EXE)?;
+    *STEP_REACHED.write().unwrap() += 1;
+
+    println!("Starting KMM...");
     Command::new("./Warhammer2MM.exe").output()?;
-    *step += 1;
-    fs::rename(&wh2_exe, &wh2_luadb_exe)?;
-    *step += 1;
-    fs::rename(&wh2_real_exe, &wh2_exe)?;
-    *step += 1;
+    *STEP_REACHED.write().unwrap() += 1;
+
+    println!("Restoring wh2-luadb.exe from Warhammer2.exe");
+    fs::rename(&**WH2_EXE, &**WH2_LUADB_EXE)?;
+    *STEP_REACHED.write().unwrap() += 1;
+
+    println!("Restoring Warhammer2.exe from Warhammer2_real.exe");
+    fs::rename(&**WH2_REAL_EXE, &**WH2_EXE)?;
+    *STEP_REACHED.write().unwrap() += 1;
+
     Ok(())
 }
 
@@ -140,6 +190,22 @@ fn find_wh2_install_dir() -> Result<PathBuf, Wh2LuaDBKMMLauncherError> {
     }
 
     Ok(wh2_path)
+}
+
+extern "system" fn ctrl_handler(ctrl_type: DWORD) -> BOOL {
+    match ctrl_type {
+        CTRL_C_EVENT | CTRL_BREAK_EVENT => {
+            eprintln!("Break detected. Restoring files...");
+            handle_interrupted();
+            FALSE
+        }
+        CTRL_CLOSE_EVENT | CTRL_LOGOFF_EVENT | CTRL_SHUTDOWN_EVENT => {
+            eprintln!("Close window detected. Restoring files...");
+            handle_interrupted();
+            TRUE
+        }
+        _ => FALSE,
+    }
 }
 
 #[derive(Debug)]

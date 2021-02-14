@@ -190,6 +190,8 @@ name = "wh2-luadb-kmm-launcher"
 version = "1.0.0"
 dependencies = [
  "crossterm",
+ "lazy_static",
+ "winapi",
  "winreg",
 ]
 
