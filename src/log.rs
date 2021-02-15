@@ -2,7 +2,7 @@ use crate::Wh2LuaError;
 use crossterm::cursor::MoveToColumn;
 use crossterm::execute;
 use crossterm::style::Colorize;
-use crossterm::terminal::{Clear, ClearType, DisableLineWrap, EnableLineWrap};
+use crossterm::terminal::{size, Clear, ClearType, DisableLineWrap, EnableLineWrap};
 
 use std::io::stderr;
 
@@ -40,8 +40,14 @@ impl Log {
         unsafe {
             if SINGLE_LINE {
                 let mut stderr = stderr();
+                let (cols, _) = size().unwrap();
+                let limit = (cols - 4) as usize;
                 execute!(stderr, MoveToColumn(1), Clear(ClearType::CurrentLine)).unwrap();
-                eprint!("{}", message);
+                if message.len() > limit {
+                    eprint!("{0:.1$}...", message, limit);
+                } else {
+                    eprint!("{}", message);
+                }
             } else {
                 eprintln!("{}", message);
             }

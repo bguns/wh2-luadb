@@ -91,7 +91,7 @@ impl Rpfm {
             let mut packed_db_files = packfile.get_packed_files_by_type(PackedFileType::DB, true);
 
             if packed_db_files.len() == 0 {
-                Log::info("No db files found");
+                Log::rpfm("No db files found");
             } else {
                 #[cfg(not(debug_assertions))]
                 Log::set_single_line_log(true);
