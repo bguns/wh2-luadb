@@ -3,4 +3,5 @@
 *.sublime-workspace
 /schemas
 wh2-luadb-kmm-launcher/target
-/release
+/release/*
+!/release/install-readme.txt
