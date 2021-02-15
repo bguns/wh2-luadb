@@ -129,20 +129,24 @@ fn do_the_things() -> Result<(), Wh2LuaDBKMMLauncherError> {
 }
 
 fn find_wh2_install_dir() -> Result<PathBuf, Wh2LuaDBKMMLauncherError> {
+    // Get the steam install dir from windows registry
     let hkcr = RegKey::predef(HKEY_CURRENT_USER);
     let steam_path: String = hkcr
         .open_subkey("SOFTWARE\\Valve\\Steam")?
         .get_value("SteamPath")?;
     println!("Steam path found at {}", steam_path);
+    // Look in the default steamapps directory for WH2
     let mut wh2_path = PathBuf::from(&steam_path);
     wh2_path.push("steamapps");
     wh2_path.push("common");
     wh2_path.push("Total War WARHAMMER II");
+    // If it's not there, we search for alternate library locations
     if !wh2_path.exists() {
         println!(
             "Warhammer 2 install not found at {}.\nLooking for alternate steam libraries...",
             wh2_path.display()
         );
+        // Steam stores alternate library locations in a file called libraryfolders.vdf
         let mut libraryfolders_path = PathBuf::from(&steam_path);
         libraryfolders_path.push("steamapps");
         libraryfolders_path.push("libraryfolders.vdf");
@@ -152,6 +156,9 @@ fn find_wh2_install_dir() -> Result<PathBuf, Wh2LuaDBKMMLauncherError> {
             ));
         }
 
+        // The libraryfolders.vdf file is a text file with a dumb format.
+        // We search for lines of the form "<number>" <tab> "Path\\To\\SteamLibrary",
+        // then split, ignore the quotes and replace the double backslashes by singles.
         let file = fs::File::open(libraryfolders_path)?;
         let buf = BufReader::new(file);
         let mut searching = false;
