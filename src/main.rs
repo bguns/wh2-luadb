@@ -46,6 +46,7 @@ fn main() {
 
             Log::debug(&format!("Config: launch_game = {}", config.launch_game));
             if config.launch_game {
+                Log::info("Starting Total War: Warhammer II...");
                 if Path::new("./Warhammer2_real.exe").exists() {
                     Command::new("./Warhammer2_real.exe").output().unwrap();
                 } else {
