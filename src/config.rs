@@ -51,7 +51,14 @@ impl Config {
 
         let launch_game = Self::calculate_should_launch_game(matches);
 
-        let schema = Rpfm::load_schema()?;
+        let game_name = if let Some(name) = matches.value_of("game") {
+            Log::info(&format!("Loading schema for game: {}", name));
+            name
+        } else {
+            "warhammer_2"
+        };
+
+        let schema = Rpfm::load_schema(game_name)?;
 
         Log::info("Config OK");
 

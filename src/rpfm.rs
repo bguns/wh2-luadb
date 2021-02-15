@@ -26,7 +26,7 @@ use rpfm_lib::schema::Schema;
 pub struct Rpfm;
 
 impl Rpfm {
-    pub fn load_schema() -> Result<Schema, Wh2LuaError> {
+    pub fn load_schema(game_name: &str) -> Result<Schema, Wh2LuaError> {
         Log::rpfm("Checking for schema update...");
         match Schema::check_update() {
             Ok(schema::APIResponseSchema::NoLocalFiles) => {
@@ -46,10 +46,8 @@ impl Rpfm {
                 return Err(Wh2LuaError::RpfmError(e));
             }
         }
-
-        Ok(Schema::load(
-            &rpfm_lib::SUPPORTED_GAMES["warhammer_2"].schema,
-        )?)
+        Log::debug(&format!("Loading schema for {}", game_name));
+        Ok(Schema::load(&rpfm_lib::SUPPORTED_GAMES[game_name].schema)?)
     }
 
     pub fn load(
@@ -285,13 +283,36 @@ impl Rpfm {
 
         let table_name = util::get_parent_folder_name(rpfm_db_file)?;
 
-        let db = DB::read(&data, table_name, &config.schema, false)?;
+        let db_result = DB::read(&data, table_name, &config.schema, false);
+        if db_result.is_err() {
+            let error = db_result.err().unwrap();
+            if error.kind() == &rpfm_error::ErrorKind::TableEmptyWithNoDefinition
+                || error.kind() == &rpfm_error::ErrorKind::SchemaDefinitionNotFound
+            {
+                Log::set_single_line_log(false);
+                Log::warning(&format!(
+                    "RPFM could not load table {} due to a missing definition in the schema, returning empty table",
+                    table_name
+                ));
+                #[cfg(not(debug_assertions))]
+                Log::set_single_line_log(true);
 
-        Ok(Self::convert_rpfm_db_to_preprocessed_db(
-            &db,
-            db.get_ref_table_name(),
-            script_file_path,
-        )?)
+                Ok(TotalWarDbPreProcessed::new(
+                    table_name,
+                    TableData::FlatArray(vec![vec![]]),
+                    script_file_path,
+                ))
+            } else {
+                Err(error.into())
+            }
+        } else {
+            let db = db_result.unwrap();
+            Ok(Self::convert_rpfm_db_to_preprocessed_db(
+                &db,
+                db.get_ref_table_name(),
+                script_file_path,
+            )?)
+        }
     }
 
     fn convert_rpfm_db_to_preprocessed_db(

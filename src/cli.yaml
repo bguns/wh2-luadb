@@ -43,3 +43,9 @@ args:
         short: u
         long: unpacked
         about: By default, the resulting script files will be placed in a (movie) .pack file in the output directory. Use this flag to have output the script files directly to the output directory instead.
+    - game:
+        short: g
+        long: game
+        value_name: SUPPORTED_GAME
+        takes_value: true
+        hidden: true
