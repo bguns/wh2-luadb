@@ -3,3 +3,4 @@
 *.sublime-workspace
 /schemas
 wh2-luadb-kmm-launcher/target
+/release

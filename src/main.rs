@@ -46,10 +46,10 @@ fn main() {
 
             Log::debug(&format!("Config: launch_game = {}", config.launch_game));
             if config.launch_game {
-                if Path::new("./Warhammer2.exe").exists() {
-                    Command::new("./Warhammer2.exe").output().unwrap();
-                } else {
+                if Path::new("./Warhammer2_real.exe").exists() {
                     Command::new("./Warhammer2_real.exe").output().unwrap();
+                } else {
+                    Command::new("./Warhammer2.exe").output().unwrap();
                 }
             }
         }
