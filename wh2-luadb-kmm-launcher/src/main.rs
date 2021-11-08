@@ -157,20 +157,12 @@ fn find_wh2_install_dir() -> Result<PathBuf, Wh2LuaDBKMMLauncherError> {
         }
 
         // The libraryfolders.vdf file is a text file with a dumb format.
-        // We search for lines of the form "<number>" <tab> "Path\\To\\SteamLibrary",
+        // We search for lines of the form "path" <tab> "Path\\To\\SteamLibrary",
         // then split, ignore the quotes and replace the double backslashes by singles.
         let file = fs::File::open(libraryfolders_path)?;
         let buf = BufReader::new(file);
-        let mut searching = false;
         for line in buf.lines().map(|l| l.unwrap()) {
-            if line.trim().starts_with("\"1\"") {
-                searching = true;
-            }
-            if searching && line.trim().starts_with("}") {
-                searching = false;
-            }
-
-            if searching {
+            if line.trim().starts_with("\"path\"") {
                 let start_path = &line
                     .trim()
                     .split("\t")
