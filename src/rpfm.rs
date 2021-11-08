@@ -105,7 +105,31 @@ impl Rpfm {
                         pf.get_path().join("/")
                     ));
                     let pf_file_name = pf.get_path().last().unwrap().clone();
-                    let db = Self::decode_db_packed_file(pf.get_ref_mut_raw(), &config.schema)?;
+                    let decode_result =
+                        Self::decode_db_packed_file(pf.get_ref_mut_raw(), &config.schema);
+
+                    if decode_result.is_err() {
+                        Log::set_single_line_log(false);
+
+                        Log::warning(&format!(
+                            "Could not process db table {} - {}. The table will be skipped.",
+                            packfile_path
+                                .file_name()
+                                .unwrap()
+                                .to_string_lossy()
+                                .to_string(),
+                            pf.get_path().join("/")
+                        ));
+                        Log::warning(&format!("Problem was: {}", decode_result.err().unwrap()));
+                        Log::warning(&format!("(If the mod this table belongs to actually works and doesn't crash the game, the table likely does nothing and this is unlikely to cause any problems)"));
+
+                        #[cfg(not(debug_assertions))]
+                        Log::set_single_line_log(true);
+
+                        continue;
+                    }
+
+                    let db = decode_result.unwrap();
 
                     let script_file_path = Self::create_script_file_path(
                         config,
