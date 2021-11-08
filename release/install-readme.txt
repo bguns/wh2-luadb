@@ -1,4 +1,4 @@
-First, make sure you are subscribed to the companion mod for this tool, found at: <WIP - should be released soon>
+First, make sure you are subscribed to the companion mod for this tool, found at: https://steamcommunity.com/sharedfiles/filedetails/?id=2397502316
 
 1. Place both executables to the same directory as Kaedrin's Mod Manager (i.e. the directory that contains Warhammer2MM.exe)
 
@@ -10,4 +10,4 @@ First, make sure you are subscribed to the companion mod for this tool, found at
 
 6. If your Total War: Warhammer 2 installation directory is under C:\\Program Files (x86)\\...(or another "protected" directory), it might be necessary to run wh2-luadb-kmm-launcher.exe as Administrator. To do so, create a shortcut (as in step 2, if you have not already done so), then right click that shortcut, go to Properties, then Advanced, and tick the "Run as Administrator" box.
 
-7. Don't forget to activate the LuaDB mod in Kaedrin's Mod Manager before starting the game (WIP - this mod does not exist yet).
+7. Don't forget to activate the LuaDB mod in Kaedrin's Mod Manager before starting the game.

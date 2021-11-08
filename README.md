@@ -2,7 +2,7 @@
 A modding tool for Total War: Warhammer 2 that can automatically generate Lua data tables from game DB files. When used as a tool, it can do so for specific packfiles or extracted DB files. It can also be used in conjunction with [Kaedrin's Mod Manager](https://github.com/Kaedrin/warhammer-mod-manager) to automatically generate these Lua scripts for all currently active mods when a user launches the game. It uses [RPFM](https://github.com/Frodo45127/rpfm)'s library to manage packfiles and their contents.
 
 ## Installation for players
-First, make sure you are subscribed to the companion mod for this tool, found <here - WIP, should be finished soon>.
+First, make sure you are subscribed to the companion mod for this tool, found [here](https://steamcommunity.com/sharedfiles/filedetails/?id=2397502316).
 
 1. Download the latest binaries from the [Releases](https://github.com/bguns/wh2-luadb/releases) page.
 2. Unzip both executables to the same directory as Kaedrin's Mod Manager (i.e. the directory that contains Warhammer2MM.exe)
@@ -13,7 +13,7 @@ First, make sure you are subscribed to the companion mod for this tool, found <h
 7. Don't forget to activate the LuaDB mod in Kaedrin's Mod Manager before starting the game.
 
 ## Usage for mod creators
-For mod creators, the basic usage is through the LuaDB mod, available <here - WIP, should be finished soon>, which provides functions that allow you to load and access the generated data tables from your Lua scripts.
+For mod creators, the basic usage is through the LuaDB mod, available [here](https://steamcommunity.com/sharedfiles/filedetails/?id=2397502316), which provides functions that allow you to load and access the generated data tables from your Lua scripts.
 
 ## Use as a standalone command line tool
 It is possible to use wh2-luadb.exe as a command line tool to generate Lua tables from a selected packfile's DB files, or from a folder containing extracted DB files. You can use the tool in this way from wherever, it doesn't have to be located in your Warhammer 2 install directory, or in the KMM directory.
